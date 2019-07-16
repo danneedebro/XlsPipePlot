@@ -65,7 +65,7 @@ module allRoundedRect(size, radius, center=false) {
 
 
 
-module torusSlice(r1, r2, start_angle, end_angle, convexity=10, r3=0, $fn=64) {
+module torusSlice(r1, r2, start_angle, end_angle, convexity=10, r3=0, $fn=$fn) {
 	rx = r1 + r2;
     ry = rx;
     trx = rx* sqrt(2) + 1;
@@ -78,8 +78,8 @@ module torusSlice(r1, r2, start_angle, end_angle, convexity=10, r3=0, $fn=64) {
     if(end_angle > start_angle)
         intersection() {
 			rotate_extrude(convexity=convexity) translate([r1,0,0]) difference() {
-				circle(r2, $fn=$fn/4);
-				circle(r3, $fn=$fn/4);
+				circle(r2, $fn=$fn);
+				circle(r3, $fn=$fn);
 			}
 
 			translate([0,0,-r2-1])
