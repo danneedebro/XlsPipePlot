@@ -54,57 +54,26 @@ namespace PipePlot
             Console.WriteLine("STEP 2: FINDING CONNECTIONS");
             xlsPipePlot.ConnectSystem();
 
-            //Console.WriteLine("STEP 3: ASSIGNING COORDS");
+            Console.WriteLine("STEP 3: ASSIGNING COORDS");
             xlsPipePlot.AssignCoordinates(new CoordsXYZ(0.00, 5.00, 100.0), 1, xlsPipePlot.Components[0], xlsPipePlot.Components[0].Segments[0].UniqueId);
 
-            Console.WriteLine("STEP 3: ASSIGNING SEGMENT FILES FROM MAIN AND LOCAL COMPONENT LIBRARY");
+            Console.WriteLine("STEP 4: ASSIGNING SEGMENT FILES FROM MAIN AND LOCAL COMPONENT LIBRARY");
             xlsPipePlot.AssignFiles();
 
             foreach (BaseComponent component in xlsPipePlot.Components)
             {
                 Console.WriteLine(component.WriteOutput());
                 Console.WriteLine();
-                //Console.WriteLine("Component " + component.TypeNameId + ", filename = " + component.Filename);
-                //foreach (BaseSegment segment in component.Segments)
-                //{
-                //    Console.WriteLine("    file=" + segment.Filename + ", template=" + segment.TemplateMain);
-                //}
             }
 
             Console.Read();
             Environment.Exit(1);
 
-            
-            //Console.WriteLine("STEP 5: CHECKING");
+            Console.WriteLine("STEP 5: WRITING TO FILE");
             xlsPipePlot.WriteToFile(fileNameOutput);
 
-            Console.WriteLine("STEP 6: CHECKING");
-            //System1.Debug();
-
-/*
-            foreach (BaseComponent component in xlsPipePlot.Components)
-            {
-                Console.WriteLine(string.Format("Component {0}: From {1} to {2}", component.TypeNameId, component.Coords1.Repr(), component.Coords2.Repr()));
-            }
-
-            foreach (BaseComponent component in xlsPipePlot.Components)
-            {
-                foreach (BaseConnection connection in component.Connections())
-                {
-                    if (connection.TargetSegment != null)
-                        Console.WriteLine(string.Format("Connection: {0}", connection.Repr()));
-                }
-                
-            }
-*/
-            Console.WriteLine(AppDomain.CurrentDomain.BaseDirectory);
-
-            //var log = new MyLogger();
-            //log.LogError("Hej {0} {1}", "apa");
             Console.WriteLine("Press any key to quit");
             Console.Read();
-
-            // Go to http://aka.ms/dotnet-get-started-console to continue learning how to build a console app! 
         }
     }
 
@@ -747,21 +716,27 @@ namespace PipeLineComponents
         /// <summary>The azimuthal angle of the segment. Between 0 and 360 degrees. 0 degrees is towards the +x-axis, 90 degrees is towards +y-axis and so on.</summary>
         /// <value>Azimuthal angle</value>
         public double AngleAzimuthal { get; set; }
+
         /// <summary>Discrete x-coordinate change over the segment (in addition to that given by the length and the angles)</summary>
         /// <value>Additional change in x-direction</value>
         public double Dx { get; set; }
+
         /// <summary>Discrete y-coordinate change over the segment (in addition to that given by the length and the angles)</summary>
         /// /// <value>Additional change in y-direction</value>
         public double Dy { get; set; }
+
         /// <summary>Discrete z-coordinate change over the segment (in addition to that given by the length and the angles)</summary>
         /// /// <value>Additional change in z-direction</value>
         public double Dz { get; set; }
+
         /// <summary>The outer diameter in millimeters</summary>
         /// <value>Outer diameter [mm]</value>
         public double DiameterOuter { get; set; }
+
         /// <summary>The wall thickness in millimeters</summary>
         /// <value>Wall thickness [mm]</value>
         public double WallThickness { get; set; }
+
         /// <summary>Parameter 1 for the segment. Used differently depending on type of component. For Pipe this is the bend radius r/Do.</summary>
         /// <value>
         /// For Pipe: r/Do&#xA;
@@ -858,14 +833,19 @@ namespace PipeLineComponents
     {
         /// <summary>A string with the unique id of the target of the connection</summary>
         public string TargetId { get; set; }
+
         /// <summary>The node on the target where the connection attaches (1 or 2, inlet or outlet)</summary>
         public int TargetNode { get; set; }
+
         /// <summary>The node on the source where the connection attaches (1 or 2, inlet or outlet)</summary>
         public int SourceNode { get; set; }
+
         /// <summary>The segment object of the target</summary>
         public BaseSegment TargetSegment { get; set; }
+
         /// <summary>The segment object of the source</summary>
         public BaseSegment SourceSegment { get; set; }
+
         /// <value>Returns true if connection is made</value>
         public bool ConnectionMade
         {
@@ -892,6 +872,7 @@ namespace PipeLineComponents
             this.SourceNode = SourceNode;
             this.SourceSegment = SourceSegment;
         }
+
         /// <summary>
         /// Constructor for a connection object
         /// </summary>
@@ -910,6 +891,7 @@ namespace PipeLineComponents
             this.SourceNode = SourceNode;
             this.SourceSegment = SourceSegment;
         }
+
         /// <summary>
         /// Returns a string representation of the connection object for debug purpose
         /// </summary>
@@ -917,6 +899,12 @@ namespace PipeLineComponents
         public string Repr() { return string.Format("[SourceName={0},SourceId={1},SourceNode={2},TargetId={3},TargetNode={4}]", SourceSegment.Name,SourceSegment.UniqueId, SourceNode, TargetSegment.UniqueId, TargetNode); }
     }
 
+    /// <summary>
+    /// Class containing the template information and methods. That is: information on how to use the information stored in the component
+    /// and segments to generate output.
+    /// Both component objects and segment objects have a template object and if or not it has a BaseSegment object or not
+    /// determines how the output is generated
+    /// </summary>
     public class BaseTemplate
     {
         private string _readText = "";
@@ -924,6 +912,12 @@ namespace PipeLineComponents
         private readonly BaseComponent Component;
         private readonly BaseSegment Segment;
 
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="Component">The parent component of the template</param>
+        /// <param name="Segment">The parent segment of the template. If it is a component template Segment = null</param>
+        /// <param name="Filename">The filename (full path) of the file to be read and used as a template.</param>
         public BaseTemplate(BaseComponent Component, BaseSegment Segment = null, string Filename = "")
         {
             this.Component = Component;
@@ -932,6 +926,10 @@ namespace PipeLineComponents
                 ReadTemplateFile(Filename);
         }
 
+        /// <summary>
+        /// Reads a file that is to be used as a template. Lines with "// REMOVE"-string will not be read.
+        /// </summary>
+        /// <param name="Filename">The filename (full path) of the file to be read and used as a template.</param>
         public void ReadTemplateFile(string Filename)
         {
             if (File.Exists(Filename) == false)
