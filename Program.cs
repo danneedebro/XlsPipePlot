@@ -5,11 +5,19 @@ using System.Text;
 using System.Threading.Tasks;
 using System.IO;
 using PipeLineComponents;
+using Bloat;
 
+/// <summary>
+/// Main program
+/// </summary>
 namespace PipePlot
 {
     class Program
     {
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="args"></param>
         static void Main(string[] args)
         {
             string fileNameInput = "C:\\Users\\Danne\\Dropbox\\Programmering\\PipePlot\\Code\\Version1\\PipePlot\\Apa.txt";
@@ -38,49 +46,72 @@ namespace PipePlot
             }
             
 
-            PipeSystem System1 = new PipeSystem();
-
-            Console.WriteLine("STEP 1: READING FROM FILE");
-            System1.ReadFile(fileNameInput);
-
-            Console.WriteLine("STEP 2: FINDING CONNECTIONS");
-            System1.ConnectSystem();
-
-            Console.WriteLine("STEP 3: ASSIGNING COORDS");
-            System1.AssignCoordinates(new CoordsXYZ(0.00, 5.00, 100.0), 1, System1.Components[0]);
-
-            Console.WriteLine("STEP 5: CHECKING");
-            System1.WriteToFile(fileNameOutput);
-
-            Console.WriteLine("STEP 6: CHECKING");
-            //System1.Debug();
-
-            //var log = new MyLogger();
-            //log.LogError("Hej {0} {1}", "apa");
+            XlsPipePlotMain xlsPipePlot = new XlsPipePlotMain(fileNameInput);
 
 
-            // Go to http://aka.ms/dotnet-get-started-console to continue learning how to build a console app! 
+            Console.WriteLine("STEP 5: WRITING TO FILE");
+            xlsPipePlot.WriteToFile(fileNameOutput);
+
+            Console.WriteLine("Press any key to quit");
+            Console.Read();
         }
     }
 
-    class PipeSystem
+    /// <summary>
+    /// Contains all methods for 1) Reading the file, 2) Connecting the system(s) and 3) Assigning coordinates
+    /// </summary>
+    class XlsPipePlotMain
     {
-        public List<IPipeLineComponent> Components = new List<IPipeLineComponent>();
+        public string PathMain = AppDomain.CurrentDomain.BaseDirectory + "Components\\";
+        public string PathLocal = "C:\\Users\\Daniel\\Dropbox\\Programmering\\PipePlot\\Code\\Version1\\PipePlot\\LocComponents\\";
 
-        private MyLogger logger = new MyLogger();
+        public List<BaseComponent> Components = new List<BaseComponent>();
 
-        public PipeSystem()
+        public List<ReferenceVolume> RefVols = new List<ReferenceVolume>();
+
+        public IDictionary<int, string> Flowpaths = new Dictionary<int, string>();
+
+        private readonly MyLogger logger = new MyLogger(Level: 3);
+
+        public XlsPipePlotMain(string Filename)
         {
-            logger.Level = 3;
+            Console.WriteLine("STEP 1: READING FROM FILE");
+            ReadFile(Filename);
+
+            Console.WriteLine("STEP 2: FINDING CONNECTIONS");
+            ConnectSystem();
+
+            Console.WriteLine("STEP 3: ASSIGNING COORDS");
+            foreach (ReferenceVolume referenceVolume in RefVols)
+            {
+                foreach (BaseComponent component in Components)
+                {
+                    if (component.IndexOf(referenceVolume.SegmentId) != -1)
+                        AssignCoordinates(component, referenceVolume.SegmentId, referenceVolume.Node, referenceVolume.Coords);
+                }    
+            }
+            if (RefVols.Count == 0)
+            {
+                logger.Warning("No reference volume given. Setting Node 1 of {0} to (x,y,z)=(0,0,0)", Components[0].Segments[0].UniqueId);
+                AssignCoordinates(Components[0], Components[0].Segments[0].UniqueId, 1, new CoordsXYZ(0, 0, 0));
+            }
+            
+
+            Console.WriteLine("STEP 4: ASSIGNING SEGMENT FILES FROM MAIN AND LOCAL COMPONENT LIBRARY");
+            AssignFiles();
         }
 
+        /// <summary>
+        /// Reads the semi colon separated input file
+        /// </summary>
+        /// <param name="Filename">The file to read</param>
         public void ReadFile(string Filename)
         {
-            List<IPipeLineComponent> ComponentsReadRaw = new List<IPipeLineComponent>();
-            string previousType = "";
-
             logger.Debug("Reading file {0}", Filename);
 
+            var previousSegment = new BaseSegment("");
+            var currentSegment = new BaseSegment("");
+            
             try
             {   // Open the text file using a stream reader.
                 using (StreamReader sr = new StreamReader(Filename))
@@ -92,41 +123,70 @@ namespace PipePlot
                     {
                         string[] inputs = line.Split(';');
 
-                        // If previous component read was a pipe segment and current one is not - add a pipe separator
-                        if (inputs[0] != "Pipe" && previousType == "Pipe")
-                        {
-                            ComponentPipeSegment endOfPipe = new ComponentPipeSegment("");
-                            endOfPipe.Type = "Pipe";
-                            endOfPipe.UniqueId = "ENDOFPIPE";    // Todo: Dirty fix
-                            ComponentsReadRaw.Add(endOfPipe);
-                            logger.Write("{0}, ", endOfPipe.UniqueId);
-                        }
-                        previousType = inputs[0];
-
                         switch (inputs[0])
                         {
                             case "Pipe":
-                                ComponentPipeSegment newPipeSegment = new ComponentPipeSegment(line);
-                                ComponentsReadRaw.Add(newPipeSegment);
-                                logger.Write("{0}, ", newPipeSegment.UniqueId);
-                                break;
-
+                            case "Tank":
                             case "Valve":
                             case "Connection":
-                                ComponentValve newValve = new ComponentValve(line);
-                                ComponentsReadRaw.Add(newValve);
-                                logger.Write("{0}, ", newValve.UniqueId);
+                            case "Reducer":
+                            case "Conn":
+                                currentSegment = new BaseSegment(line);
+                                logger.Write("{0}, ", currentSegment.UniqueId);
+
+                                if (currentSegment.Type != previousSegment.Type)
+                                {
+                                    var newComponent = new BaseComponent(currentSegment);
+                                    Components.Add(newComponent);
+                                }
+                                else if(currentSegment.Type == previousSegment.Type)
+                                {
+                                    // If Pipe and changing dimensions - add a reducer between
+                                    // TODO: Also include i a discrete coord change (dx, dy or dz) is given
+                                    if (currentSegment.Type == "Pipe" && (currentSegment.DiameterOuter != previousSegment.DiameterOuter || currentSegment.WallThickness != previousSegment.WallThickness) )
+                                    {
+                                        var newReducer = new BaseComponent(line);
+                                        newReducer.Segments[0].Type = "Reducer";
+                                        newReducer.Segments[0].UniqueId = "-";
+                                        newReducer.Segments[0].Length = 0.00;
+                                        newReducer.Segments[0].DiameterOuter = previousSegment.DiameterOuter;
+                                        newReducer.Segments[0].Parameter1 = currentSegment.DiameterOuter;
+                                        if (previousSegment.DiameterOuter <= currentSegment.DiameterOuter)
+                                            newReducer.Segments[0].Filename = "ReducerStraightExp.scad";
+                                        else
+                                            newReducer.Segments[0].Filename = "ReducerStraightRed.scad";
+                                        
+                                        newReducer.Segments[0].Connections[0].TargetSegment = previousSegment;
+                                        newReducer.Segments[0].Connections[1].TargetSegment = currentSegment;
+                                        newReducer.Segments[0].Connections[0].TargetId = previousSegment.UniqueId;
+                                        newReducer.Segments[0].Connections[1].TargetId = currentSegment.UniqueId;
+                                        newReducer.Segments[0].Connections[0].TargetNode = 2;
+                                        newReducer.Segments[0].Connections[1].TargetNode = 1;
+                                        Components.Add(newReducer);
+
+                                        Components.Add(new BaseComponent(currentSegment));
+
+                                    }
+                                    else  // If other component
+                                    {
+                                        Components[Components.Count - 1].AddSegment(currentSegment);
+                                    }
+                                }
                                 break;
 
-                            case "Tank":
-                                ComponentTank newTank = new ComponentTank(line);
-                                ComponentsReadRaw.Add(newTank);
-                                logger.Write("{0}, ", newTank.UniqueId);
+                            case "Refvol":
+                                RefVols.Add(new ReferenceVolume(line));
+                                break;
+
+                            case "Flowpath":
+                                Flowpaths.Add(Components.Count, inputs[1]);
                                 break;
 
                             default:
+                                currentSegment = new BaseSegment("");
                                 break;
                         }
+                        previousSegment = currentSegment;
 
                     }
                 }
@@ -135,132 +195,160 @@ namespace PipePlot
             {
                 Console.WriteLine("The file could not be read:");
                 Console.WriteLine(e.Message);
+                Environment.Exit(1);
             }
 
             logger.WriteLine("");
 
-            logger.Debug("Components in 'ComponentsReadRaw':");
-            foreach (IPipeLineComponent component in ComponentsReadRaw)
+            logger.Debug("Components in 'Components':");
+            foreach (BaseComponent component in Components)
             {
-                logger.Debug("   " + component.BaseProperties.TypeNameId);
+                logger.Debug("   " + component.Name);
+                
             }
-
-
-            // Loop through 'ComponentsReadRaw' and merge pipe segment components inte pipe components
-            // that contains pipe segments of the same size. Store everything in 'Components'
-            IPipeLineComponent previousComponent = new ComponentTank("");
-            ComponentPipe currentPipe = new ComponentPipe("");
-            foreach (IPipeLineComponent currentComponent in ComponentsReadRaw)
-            {
-                logger.Debug("Loopar {0}",currentComponent.BaseProperties.TypeNameId);
-                switch (currentComponent.BaseProperties.Type)
-                {
-                    case "Pipe":
-                        // Cast the currentComponent to a pipe segment object
-                        ComponentPipeSegment currentPipeSegment = (ComponentPipeSegment)currentComponent;
-
-                        if (previousComponent.BaseProperties.Type != "Pipe")  // If first pipe segment
-                        {
-                            logger.Debug("   - Första pipesegment hittat");
-                            currentPipe = new ComponentPipe(currentPipeSegment);
-                            currentPipe.AddSegment(currentPipeSegment);
-                        }
-                        else  // If not first segment
-                        {
-                            logger.Debug("   - inte första pipesegment");
-                            ComponentPipeSegment previousPipeSegment = (ComponentPipeSegment)previousComponent;
-                            if (currentPipeSegment.DiameterOuter == previousPipeSegment.DiameterOuter && currentPipeSegment.WallThickness == previousPipeSegment.WallThickness) // Same pipe
-                            {
-                                logger.Debug("   - pipesegment har samma dimensioner som föregående");
-                                currentPipe.AddSegment(currentPipeSegment);
-                            }
-                            else if (currentPipeSegment.UniqueId == "ENDOFPIPE")
-                            {
-                                logger.Debug("   - pipeseparator funnen");
-                                Components.Add(currentPipe);
-                                currentPipe = new ComponentPipe("");
-                            }
-                            else  // Change of dimension - add a connector of some sort
-                            {
-                                logger.Debug("   - pipe ändrar dimension här");
-                                Components.Add(currentPipe);
-                                ComponentValve newConnector = new ComponentValve("");
-                                newConnector.Type = "Connection";
-                                newConnector.Name = "Reducer";
-                                newConnector.Connections.Add( new BaseConnection(previousPipeSegment.UniqueId, 2) );
-                                newConnector.Connections.Add( new BaseConnection(currentPipeSegment.UniqueId, 1));
-                                Components.Add(newConnector);
-                                currentPipe = new ComponentPipe(currentPipeSegment);
-                                currentPipe.AddSegment(currentPipeSegment);
-                            }
-                        }
-                        
-                        break;
-
-                    default:
-                        Components.Add(currentComponent);
-                        break;
-                }
-                previousComponent = currentComponent;
-            }
-
         }
 
+        /// <summary>
+        /// Loops through all the connections in all segments in all components and looks for its connection. When 
+        /// the unique id is found this segment is stored in the BaseConnection object representing the connection
+        /// </summary>
         public void ConnectSystem()
         {
             string uniqueIdToLookFor;
             bool connectionFound;
-            foreach (IJunctionComponent junction in Components.OfType<IJunctionComponent>())
+
+            // Loop through each component and its connections and make connections
+            foreach (BaseComponent component in Components)
             {
-                for (int i = 0; i < junction.Connections.Count; i++)
+                foreach (BaseConnection connection in component.Connections())
                 {
-                    uniqueIdToLookFor = junction.Connections[i].Id;
-                    if (junction.Connections[i].Component == null)
+                    // If current connection is not made (only ID as string present and not segment object), look for it in the
+                    //  other components
+                    if (connection.ConnectionMade == false)  
                     {
+                        uniqueIdToLookFor = connection.TargetId;
                         connectionFound = false;
-                        foreach (IPipeLineComponent component in Components)
+                        logger.Debug("   Looking for Id='{0}'", uniqueIdToLookFor);
+
+                        foreach (BaseComponent componentToLookIn in Components)
                         {
-                            if (component.HasId(uniqueIdToLookFor) == true)
+                            int segmentIndex = componentToLookIn.IndexOf(uniqueIdToLookFor);
+                            if (segmentIndex != -1)
                             {
-                                junction.Connections[i].Component = component;
+                                logger.Debug("      Found connection");
+                                connection.TargetSegment = componentToLookIn.Segments[segmentIndex];
                                 connectionFound = true;
                                 break;
                             }
                         }
-                        if (connectionFound == false) { logger.Warning("Connection {0} of '{1}' not found", i,  junction.BaseProperties.TypeNameId); }
+
+                        if (connectionFound == false)
+                            logger.Warning("      Warning: Connection in segment with Id={0} to segment with Id={1} not found", connection.SourceSegment.UniqueId, connection.TargetId); 
                     }
                 }
             }
         }
 
-        public void Debug()
+        /// <summary>
+        /// Loop through each component and assign suitable .scad-files to each segment.
+        /// </summary>
+        public void AssignFiles()
         {
-            Console.WriteLine(Environment.NewLine + "Components read:");
-            foreach (IPipeLineComponent component in Components)
-            {
-                Console.WriteLine(string.Format("'{0}': Read OK", component.BaseProperties.TypeNameId));
-            }
+            IDictionary<string, string> defaultTemplateFiles = new Dictionary<string, string>()
+                                            { {"Tank","TankDefault.scad"}, {"Valve", "ValveDefault.scad"}, {"Reducer","ReducerStraight.scad"}, {"Connection", "Cylinder.scad"} };
+            IDictionary<string, string> defaultColors = new Dictionary<string, string>()
+                                            { {"Pipe","grey"}, {"Tank","grey"}, {"Valve", "red"}, {"Reducer","red"}, {"Connection", "red"} };
 
-            Console.WriteLine(Environment.NewLine + "Connecting components:");
-            foreach (IJunctionComponent junction in Components.OfType<IJunctionComponent>())
+            foreach (BaseComponent component in Components)
             {
-                try
+                // Instanciate both component and segment template without file
+                component.Template = new BaseTemplate(component);
+                foreach (BaseSegment segment in component.Segments)
+                    segment.Template = new BaseTemplate(component, segment);
+
+                // Set default colors
+                if (component.Color == null)
                 {
-                    Console.WriteLine(string.Format("'{0}': Connects from '{1}' and to '{2}'", junction.BaseProperties.TypeNameId, junction.Connections[0].Component.BaseProperties.TypeNameId, junction.Connections[1].Component.BaseProperties.TypeNameId));
+                    if (!defaultColors.TryGetValue(component.Type, out string defaultColor))
+                        defaultColor = "green";
+                    component.Color = defaultColor;
                 }
-                catch { }
-            }
 
-            Console.WriteLine(Environment.NewLine + "Component output:");
-            foreach (IPipeLineComponent component in Components)
-            {
-                Console.WriteLine(component.WriteOutput());
+                // If pipe, no custom .scad files are allowed
+                if (component.Type == "Pipe")
+                {
+                    component.Template.ReadTemplateFile(PathMain + "PipeSegment.scad");
+                    continue;
+                }
+
+                // Loop through each segment and depending on its type and other properties assign it a suitable .scad file
+                List<string> localFilenames = new List<string>();
+                foreach (BaseSegment segment in component.Segments)
+                {
+                    // Assign default template files for each segment
+                    if (!defaultTemplateFiles.TryGetValue(component.Type, out string fn))
+                        fn = "Cylinder.scad";
+
+                    // Update template with informaton from default template files
+                    segment.Template.ReadTemplateFile(PathMain + fn);
+
+                    // Check if file exists first in local folder, then in main folder
+                    if (segment.Filename != null)
+                    {
+                        // If template file exist in local folder AND main folder - use file in local folder
+                        // If template file exist only in main folder - use this file
+                        // If doesn't exist anywhere - create file in local folder (at a later stage)
+                        if (File.Exists(PathLocal + segment.Filename) == true)
+                        {
+                            segment.Filename = PathLocal + segment.Filename;
+                            localFilenames.Add(segment.Filename);
+                        }
+                        else if (File.Exists(PathMain + segment.Filename) == true)
+                        {
+                            segment.Template.ReadTemplateFile(PathMain + segment.Filename);
+                            segment.Filename = null;
+                        }
+                        else
+                        {
+                            segment.Filename = PathLocal + segment.Filename;
+                            localFilenames.Add(segment.Filename);
+                        }
+                    }
+                }
+
+                localFilenames = localFilenames.Distinct().ToList();
+
+                // Update component template with information from from specified template files
+                if (localFilenames.Count == 1 && component.Segments.Count > 1)
+                {
+                    component.Filename = localFilenames[0];
+
+                    // Update component template with information read from local file (if file doesn't exists it is created)
+                    component.Template.ReadTemplateFile(component.Filename);
+                }
+
+                // Update segment template with information from from specified template files (both in local and main path)
+                foreach (BaseSegment segment in component.Segments)
+                {
+                    if (segment.Filename != null)
+                        segment.Template.ReadTemplateFile(segment.Filename);
+                }
             }
         }
 
-        public void AssignCoordinates(CoordsXYZ CoordsToSet, int Node, IPipeLineComponent CurrentComponent, string SegmentId = "")
+        /// <summary>
+        /// Recursive method to 
+        /// 1) Assign coordinates to component (exit if already done), 
+        /// 2) Loop through its connections and run this method on these and...
+        /// 3) Loop through every connection in all components and see if they attach to this component
+        /// </summary>
+        /// <param name="CoordsToSet">The coordinates to assign to the component</param>
+        /// <param name="Node">The node (1 or 2, inlet or outlet) where the coordinates apply</param>
+        /// <param name="CurrentComponent">The component object</param>
+        /// <param name="SegmentId">The segment id</param>
+        public void AssignCoordinates(BaseComponent CurrentComponent, string SegmentId, int Node, CoordsXYZ CoordsToSet)
         {
-            logger.Debug("- Assigning coordinates for '{0}'", CurrentComponent.BaseProperties.TypeNameId);
+            logger.Debug("- Assigning coordinates for '{0}'", CurrentComponent.TypeNameId);
 
             // If component coord is already set, quit
             if (CurrentComponent.CoordsIsSet == true)
@@ -270,46 +358,37 @@ namespace PipePlot
             }
             else
             {
-                CurrentComponent.SetCoordinates(new CoordsXYZ(CoordsToSet.X, CoordsToSet.Y, CoordsToSet.Z), Node, SegmentId);
-                logger.Debug("   - Coordinates of {0} set to Coords1={1} and Coords2={2}", CurrentComponent.BaseProperties.TypeNameId, CurrentComponent.BaseProperties.Coords1.Repr(), CurrentComponent.BaseProperties.Coords2.Repr());
+                CurrentComponent.SetCoordinates(SegmentId, Node, new CoordsXYZ(CoordsToSet.X, CoordsToSet.Y, CoordsToSet.Z));
+                logger.Debug("   - Coordinates of {0} set to Coords1={1} and Coords2={2}", CurrentComponent.Name, CurrentComponent.Coords1.Repr(), CurrentComponent.Coords2.Repr());
             }
-
-            
-
+                       
             // Loop through its connections to see what it connects to - assign Coordinates to these
-            if (CurrentComponent is IJunctionComponent)
+            foreach (BaseConnection connection in CurrentComponent.Connections(OnlyValidConnections: true))
             {
-                logger.Debug("   - Looping through its {0} connections", CurrentComponent.BaseProperties.Connections.Count);
+                var CoordsToSetToConnectingComponent = connection.SourceNode == 1 ? connection.SourceSegment.Coords1 : connection.SourceSegment.Coords2;
                 
-                for (int i = 0; i < CurrentComponent.BaseProperties.Connections.Count; i++)
-                {
-                    BaseConnection connection = CurrentComponent.BaseProperties.Connections[i];
-
-                    CoordsXYZ CoordsToSetToConnectingComponent = i == 0 ? CurrentComponent.BaseProperties.Coords1 : CurrentComponent.BaseProperties.Coords2;
-                    logger.Debug("      - Connection {0} of '{1}': {2} is assigned coords={3}", i, CurrentComponent.BaseProperties.TypeNameId, connection.Repr(), CoordsToSetToConnectingComponent.Repr());
-                    AssignCoordinates(CoordsToSetToConnectingComponent, connection.Node, CurrentComponent.BaseProperties.Connections[i].Component, CurrentComponent.BaseProperties.Connections[i].Id);
-                }
+                logger.Debug("      - Connection {0} of '{1}': {2} is assigned coords={3}", -1, CurrentComponent.Name, connection.Repr(), CoordsToSetToConnectingComponent.Repr());
+                AssignCoordinates(connection.TargetSegment.Parent, connection.TargetId, connection.TargetNode, CoordsToSetToConnectingComponent);
             }
-            else { logger.Debug("   - No connections in component"); }
 
             // Loop through every junction/connecting component to see if it connects to current component, if it does - run assignCoordinates
-
-            foreach (IPipeLineComponent connectingComponent in Components)
+            foreach (BaseComponent component in Components)
             {
-                if ( !(connectingComponent is IJunctionComponent)) { continue; }
-                for (int i = 0; i < connectingComponent.BaseProperties.Connections.Count; i++)
+                foreach (BaseConnection connection in component.Connections(OnlyValidConnections: true))
                 {
-                    BaseConnection connection = connectingComponent.BaseProperties.Connections[i];
-                    if (connection.Component == CurrentComponent)
+                    if (CurrentComponent.IndexOf(connection.TargetSegment) != -1)
                     {
-                        logger.Debug("   - Junction {0}/{1}/{2} connects to {3}/{4}/{5}", connectingComponent.BaseProperties.Type, connectingComponent.BaseProperties.Name, connectingComponent.BaseProperties.UniqueId, CurrentComponent.BaseProperties.Type, CurrentComponent.BaseProperties.Name, CurrentComponent.BaseProperties.UniqueId);
-                        CoordsXYZ CoordsToSetToConnectingJunction = CurrentComponent.GetCoordinates(connection.Node, connection.Id);
-                        AssignCoordinates(CoordsToSetToConnectingJunction, i + 1, connectingComponent, connectingComponent.BaseProperties.UniqueId);
+                        var CoordsToSetToConnectingJunction = connection.TargetNode == 1 ? connection.TargetSegment.Coords1 : connection.TargetSegment.Coords2;   // CurrentComponent.GetCoordinates(connection.TargetNode, connection.TargetId);
+                        AssignCoordinates(component, connection.SourceSegment.UniqueId, connection.SourceNode, CoordsToSetToConnectingJunction);
                     }
                 }
             }
-        }
+         }
 
+        /// <summary>
+        /// Writes to file
+        /// </summary>
+        /// <param name="Filename">The OpenSCAD output file</param>
         public void WriteToFile(string Filename)
         {
             logger.Debug("Writing to file '{0}'", Filename);
@@ -317,7 +396,7 @@ namespace PipePlot
             FileStream f = new FileStream(Filename, FileMode.Create);
             StreamWriter s = new StreamWriter(f);
 
-
+            s.WriteLine("// Generated " + DateTime.Now.ToString());
             s.WriteLine("$fn=50;");
             s.WriteLine("use <curvedPipe.scad>");
             s.WriteLine("");
@@ -326,54 +405,134 @@ namespace PipePlot
             s.WriteLine("colorValve = \"red\";");
             s.WriteLine("colorTank = \"grey\";");
             s.WriteLine("");
+            s.WriteLine("");
+            s.WriteLine("// Default flowpath");
+            s.WriteLine("scale([1000, 1000, 1000])");
+            s.WriteLine("{");
 
+            
+
+            foreach (BaseComponent component in Components)
+            {
+                // Write out a new flowpath the current index is present in the 'Flowpaths' dictionary.
+                if (Flowpaths.TryGetValue(Components.IndexOf(component), out string Caption))
+                {
+                    s.WriteLine("}");
+                    s.WriteLine("");
+                    s.WriteLine("");
+                    s.WriteLine(string.Format("// {0}", Caption));
+                    s.WriteLine("scale([1000, 1000, 1000])");
+                    s.WriteLine("{");
+                }
+                    
+                s.WriteLine(component.Template.OutputComponent(IndentLevel: 1));
+            }
+            s.WriteLine("}");
+            s.WriteLine("");
+            s.WriteLine("");
+
+            // Write out fauly connections (those where the source and the target coords are larger than tolerance) as 
+            // lines between source and target node (if any)
+            s.WriteLine("// Faulty connections");
+            s.WriteLine("module line(start, end, thickness = 0.010)");
+            s.WriteLine("{");
+            s.WriteLine("    $fn=10;");
+            s.WriteLine("    hull()");
+            s.WriteLine("    {");
+            s.WriteLine("        translate(start) sphere(thickness);");
+            s.WriteLine("        translate(end) sphere(thickness);");
+            s.WriteLine("    }");
+            s.WriteLine("}");
+            s.WriteLine("");
 
             s.WriteLine("scale([1000, 1000, 1000])");
-            s.WriteLine("{{");
+            s.WriteLine("{");
 
-            foreach (IPipeLineComponent component in Components)
+            foreach (BaseComponent component in Components)
             {
-                s.WriteLine(component.WriteOutput());
-
+                foreach (BaseConnection connection in component.Connections(OnlyValidConnections: true))
+                {
+                    if (connection.CoordsWithinTolerance() == false)
+                        s.WriteLine(string.Format("    line({0}, {1});  // Connection {2} of {3}", connection.SourceSegment.GetCoordinates(connection.SourceNode).Repr(), connection.TargetSegment.GetCoordinates(connection.TargetNode).Repr(), connection.SourceNode, connection.SourceSegment.UniqueId));
+                }
             }
-            s.WriteLine("}}");
+
+            s.WriteLine("}");
             s.Close();
             f.Close();
             Console.WriteLine("File created successfully...");
         }
-    }
 
+            
+    }
+    /// <summary>
+    /// Logger class
+    /// </summary>
     public class MyLogger
     {
+        /// <summary>
+        /// The level of what is to print out to screen.
+        /// </summary>
         public int Level { get; set; }
 
-        /*
-        5. DEBUG
-        4. INFO
-        3. WARNING
-        2. ERROR
-        1. CRITICAL
-        */
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="Level">The level of what is to be output to screen. 5=Debug, 4=Info, 3=Warnings, 2=Error, 1=Critical</param>
+        public MyLogger(int Level)
+        {
+            this.Level = Level;
+        }
 
+        /// <summary>
+        /// Produces an error message
+        /// </summary>
+        /// <param name="format">A string.Format string</param>
+        /// <param name="args">Arguments for the string.Format method</param>
         public void Error(string format, params object[] args)
         {
             if (Level >= 2) { Console.WriteLine(string.Format(format, args)); }
         }
 
+        /// <summary>
+        /// Produces an warning message 
+        /// </summary>
+        /// <param name="format">A string.Format string</param>
+        /// <param name="args">Arguments for the string.Format method</param>
         public void Warning(string format, params object[] args)
         {
-            if (Level >= 3) { Console.WriteLine(string.Format(format, args)); }
+            if (Level >= 3)
+            {
+                Console.Beep();
+                Console.WriteLine(string.Format(format, args));
+            }
         }
 
+        /// <summary>
+        /// Produces an debug message
+        /// </summary>
+        /// <param name="format">A string.Format string</param>
+        /// <param name="args">Arguments for the string.Format method</param>
         public void Debug(string format, params object[] args)
         {
             if (Level >= 5) { Console.WriteLine(string.Format(format, args)); }
         }
 
+        /// <summary>
+        /// Writes always visible message to console w/o line break
+        /// </summary>
+        /// <param name="format">A string.Format string</param>
+        /// <param name="args">Arguments for the string.Format method</param>
         public void Write(string format, params object[] args)
         {
             Console.Write(string.Format(format, args));
         }
+
+        /// <summary>
+        /// Writes always visible message to console with line break
+        /// </summary>
+        /// <param name="format">A string.Format string</param>
+        /// <param name="args">Arguments for the string.Format method</param>
         public void WriteLine(string format, params object[] args)
         {
             Console.WriteLine(string.Format(format, args));
@@ -387,281 +546,114 @@ namespace PipePlot
 
 namespace PipeLineComponents
 {
-    public interface IPipeLineComponent
-    {
-        bool CoordsIsSet { get; set; }
-
-        BaseComponent BaseProperties { get; }
-
-        string WriteOutput();
-        bool HasId(string UniqueId);
-
-        void SetCoordinates(CoordsXYZ NewCoords, int Node, string SegmentId);
-        CoordsXYZ GetCoordinates(int Node, string SegmentId);
-
-    }
-
-    public interface IJunctionComponent
-    {
-        BaseComponent BaseProperties { get; }
-
-        List<BaseConnection> Connections { get; set; }
-    }
-
-    public class BaseConnection
-    {
-        public string Id { get; set; }
-        public int Node { get; set; }
-        public IPipeLineComponent Component { get; set; }
-
-        public BaseConnection(string Id, int Node)
-        {
-            this.Id = Id;
-            this.Node = Node;
-        }
-        public BaseConnection(string Id, string NodeStr)
-        {
-            this.Id = Id;
-            int i = -1;
-            if (!Int32.TryParse(NodeStr, out i))
-            {
-                i = -1;
-
-            }
-            this.Node = i;
-        }
-
-        public string Repr() { return string.Format("[Id={0}/Node={1}]", Id, Node); }
-    }
-
-    public class CoordsXYZ
-    {
-        public double X { get; set; }
-        public double Y { get; set; }
-        public double Z { get; set; }
-        public bool IsSet {get; set; }
-        
-        public CoordsXYZ() { }
-        public CoordsXYZ(double X0, double Y0, double Z0)
-        {
-            IsSet = true;
-            this.X = X0; this.Y = Y0; this.Z = Z0;
-        }
-
-        public string Repr() { return string.Format("[{0},{1},{2}]", X, Y, Z); }
-    }
-
+    /// <summary>
+    /// Class that for a basic pipeline component containing one or more segments and connections
+    /// </summary>
     public class BaseComponent
     {
-        public string Name { get; set; }
-        public string UniqueId { get; set; }
-        public string Type { get; set; }
+        /// <value>The name of the component. Equals the name of the first segment if multiple segments in component</value>
+        public string Name { get { return Segments[0].Name; } }
 
-        public string TypeNameId { get { return string.Format("Type={0}/Name={1}/Id={2}", Type, Name, UniqueId); } }
+        /// <value>The type of the component</value>
+        public string Type { get { return Segments[0].Type; } }
 
-        public BaseComponent BaseProperties{ get { return this; } }
+        /// <summary>
+        /// The color of the component
+        /// </summary>
+        public string Color { get; set; }
 
-        public List<BaseConnection> Connections { get; set; }
+        /// <value>A string representaton of the component</value>
+        public string TypeNameId { get { return string.Format("Type={0}/Name={1}/Id={2}", Type, Name, Segments[0].UniqueId); } }
 
-        public double Length { get; set; }
-        public double AngleVertical { get; set; }
-        public double AngleAzimuthal { get; set; }
-        public double Dx { get; set; }
-        public double Dy { get; set; }
-        public double Dz { get; set; }
-        public double DiameterOuter { get; set; }
-        public double WallThickness { get; set; }
-        public string Parameter1 { get; set; }
-        public string Parameter2 { get; set; }
+        /// <summary>
+        /// If only one .scad-file is given for each segment in the component, this is the filename for the component.
+        /// It is used to generate a aggregate .scad-file consisting of many segments
+        /// </summary>
+        /// <value>Empty string if no filename is given or component consists of many .scad-files</value>
+        public string Filename { get; set; }
+
+        /// <summary>
+        /// Object that stores the component template information (OpenSCAD code written with keywords instead of actual values)
+        /// </summary>
+        public BaseTemplate Template { get; set; }
+
+        /// <summary>A list containing the segments in the component</summary>
+        public List<BaseSegment> Segments { get; set; }
+
+        /// <summary>True</summary>
+        /// <value>True if coordinates is set, false otherwise</value>
         public bool CoordsIsSet { get; set; }
-        public CoordsXYZ Coords1 { get; set; }
-        public CoordsXYZ Coords2 { get; set; }
 
+        /// <summary>The coordinates of the inlet (node 1 of segment 0) of the component</summary>
+        /// <value></value>
+        public CoordsXYZ Coords1 { get { return Segments[0].Coords1; } }
+
+        /// <summary>The coordinates of the inlet (node 2 of segment N) of the component</summary>
+        /// <value></value>
+        public CoordsXYZ Coords2 { get { return Segments[Segments.Count - 1].Coords2; } }
+
+        /// <param name="InputString">A semi colon separated string with segment input for the first segment of the component</param>
         public BaseComponent(string InputString)
         {
-            string[] inputWords = InputString.Split(';');
-            this.Connections = new List<BaseConnection>();
-            this.Coords1 = new CoordsXYZ();
-            this.Coords2 = new CoordsXYZ();
-
-            if (inputWords.Length >= 17)
-            {
-                this.Type = inputWords[0];
-                this.UniqueId = inputWords[1];
-                this.Length = Convert.ToDouble(inputWords[2]);
-                this.AngleVertical = Convert.ToDouble(inputWords[3]);
-                this.AngleAzimuthal = Convert.ToDouble(inputWords[4]);
-                this.Dx = Convert.ToDouble(inputWords[5]);
-                this.Dy = Convert.ToDouble(inputWords[6]);
-                this.Dz = Convert.ToDouble(inputWords[7]);
-                this.DiameterOuter = Convert.ToDouble(inputWords[8]);
-                this.WallThickness = Convert.ToDouble(inputWords[9]);
-                this.Name = inputWords[10];
-
-                BaseConnection connectionFrom = new BaseConnection(inputWords[11], inputWords[12]);
-                this.Connections.Add(connectionFrom);
-
-                BaseConnection connectionTo = new BaseConnection(inputWords[13], inputWords[14]);
-                this.Connections.Add(connectionTo);
-
-                this.Parameter1 = inputWords[15];
-                this.Parameter2 = inputWords[16];
-            }
-
+            Segments = new List<BaseSegment>();
+            var firstSegment = new BaseSegment(InputString);
+            Segments.Add(firstSegment);
         }
 
-        public void SetCoordinates(CoordsXYZ NewCoords, int Node, string SegmentId = "")
+        /// <param name="FirstSegment">A segment object for the first segment of the component</param>
+        public BaseComponent(BaseSegment FirstSegment)
         {
-            double deg2rad = Math.PI / 180;
-            switch (Node)
+            Segments = new List<BaseSegment>();
+            Segments.Add(FirstSegment);
+            FirstSegment.Parent = this;
+        }
+
+        /// <summary>Adds a segment object to the segment list</summary>
+        /// <param name="NewSegment">A segment object for the segment to add to the component</param>
+        public void AddSegment(BaseSegment NewSegment)
+        {
+            NewSegment.Parent = this;
+            Segments.Add(NewSegment);
+        }
+
+        /// <summary>Sets the coordinates (xyz) to all the segments of the component given coordinates and a reference location (segment and node)</summary>
+        /// <param name="NewCoords">The coords of the reference location</param>
+        /// <param name="Node">The node (1 or 2) of the reference segment</param>
+        /// <param name="SegmentId">The unique id of the reference segment</param>
+        public void SetCoordinates(string SegmentId, int Node, CoordsXYZ NewCoords)
+        {
+            int segmentIndex = IndexOf(SegmentId);
+
+            if (segmentIndex == -1)
             {
-                case 1:
-                    Coords1.X = NewCoords.X; Coords1.Y = NewCoords.Y; Coords1.Z = NewCoords.Z;
-                    Coords2.X = Coords1.X + Length * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad) + Dx;
-                    Coords2.Y = Coords1.Y + Length * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad) + Dy;
-                    Coords2.Z = Coords1.Z + Length * Math.Sin(AngleVertical * deg2rad) + Dz;
-                    break;
-                case 2:
-                    Coords2.X = NewCoords.X; Coords2.Y = NewCoords.Y; Coords2.Z = NewCoords.Z;
-                    Coords1.X = Coords2.X - Length * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad) - Dx;
-                    Coords1.Y = Coords2.Y - Length * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad) - Dy;
-                    Coords1.Z = Coords2.Z - Length * Math.Sin(AngleVertical * deg2rad) - Dz;
-                    break;
-                default:
-                    break;
+                Console.WriteLine(string.Format("SegmentId {0} not found in {1}", SegmentId, Name));
+                return;
             }
+
+            // Assign coordinates to segment with ID 'SegmentId'
+            Segments[segmentIndex].SetCoordinates(new CoordsXYZ(NewCoords.X, NewCoords.Y, NewCoords.Z), Node);
+
+            // Assign coordinates from segment after segment with ID 'SegmentId' to last segment
+            for (int i = segmentIndex + 1; i < Segments.Count; i++)
+            {
+                Segments[i].SetCoordinates(Segments[i - 1].Coords2, 1);
+            }
+
+            // Assign coordinates from segment before segment with ID 'SegmentId' to first segment
+            for (int i = segmentIndex - 1; i >= 0; i--)
+            {
+                Segments[i].SetCoordinates(Segments[i + 1].Coords1, 2);
+            }
+
             CoordsIsSet = true;
         }
 
-        public CoordsXYZ GetCoordinates(int Node, string SegmentId)
-        {
-            if (Node == 1) { return Coords1; }else { return Coords2; }
-        }
-    }
-
-    public class ComponentValve : BaseComponent, IPipeLineComponent, IJunctionComponent
-    {
-        public ComponentValve(string InputString) : base(InputString) { }
-
-        public string WriteOutput()
-        {
-            var valveString = new StringBuilder();
-            valveString.AppendFormat("    // Valve {1}{0}", Environment.NewLine, this.Name);
-            valveString.AppendFormat("    color(colorValve){0}", Environment.NewLine);
-            valveString.AppendFormat("    translate({1}){0}", Environment.NewLine, this.Coords1.Repr() );
-            valveString.AppendFormat("    rotate([0,{1},{2}]){0}", Environment.NewLine, -this.AngleVertical, this.AngleAzimuthal);
-            valveString.AppendFormat("    rotate([0, 90, 0]){0}", Environment.NewLine);
-            valveString.AppendFormat("    translate([0, 0, {1}]){0}", Environment.NewLine, this.Length/2);
-            valveString.AppendFormat("    {{ {0}", Environment.NewLine);
-            valveString.AppendFormat("        cylinder(h = {1}, r = {2}, center = true);{0}", Environment.NewLine, this.Length, this.DiameterOuter/2000);
-            valveString.AppendFormat("    }} {0}", Environment.NewLine);
-            return valveString.ToString();
-        }
-
-        public bool HasId(string UniqueIdToLookFor)
-        {
-            return UniqueId == UniqueIdToLookFor ? true : false;
-        }
-    }
-
-    public class ComponentTank : BaseComponent , IPipeLineComponent
-    {
-        public ComponentTank(string InputString) : base(InputString) { }
-
-        public string WriteOutput()
-        {
-            var tankString = new StringBuilder();
-            tankString.AppendFormat("    // Valve {1}{0}", Environment.NewLine, this.Name);
-            tankString.AppendFormat("    color(colorTank){0}", Environment.NewLine);
-            tankString.AppendFormat("    translate({1}){0}", Environment.NewLine, this.Coords1.Repr());
-            tankString.AppendFormat("    rotate([0,{1},{2}]){0}", Environment.NewLine, -this.AngleVertical, this.AngleAzimuthal);
-            tankString.AppendFormat("    rotate([0, 90, 0]){0}", Environment.NewLine);
-            tankString.AppendFormat("    translate([0, 0, {1}]){0}", Environment.NewLine, this.Length / 2);
-            tankString.AppendFormat("    {{ {0}", Environment.NewLine);
-            tankString.AppendFormat("        cylinder(h = {1}, r = {2}, center = true);{0}", Environment.NewLine, this.Length, this.DiameterOuter / 2000);
-            tankString.AppendFormat("    }} {0}", Environment.NewLine);
-            return tankString.ToString();
-        }
-
-        public bool HasId(string UniqueIdToLookFor)
-        {
-            return UniqueId == UniqueIdToLookFor ? true : false;
-        }
-    }
-
-    public class ComponentPipe : BaseComponent , IPipeLineComponent
-    {
-        public List<ComponentPipeSegment> Segments = new List<ComponentPipeSegment>();
-
-        public new string Name
-        {
-            get
-            {
-                string Result = "";
-                foreach (ComponentPipeSegment segment in Segments)
-                {
-                    Result += segment.UniqueId + ",";
-                }
-                return Result; }
-            set {    }
-        }
-
-        public ComponentPipe(string InputString) : base(InputString) { }
-
-        public ComponentPipe(ComponentPipeSegment SegmentToUseAsBase) : base("")
-        {
-            Type = "PipeRun";
-            Name = SegmentToUseAsBase.Name;
-            UniqueId = SegmentToUseAsBase.UniqueId;
-
-        }
-
-        public void AddSegment(ComponentPipeSegment NewPipeSegment)
-        {
-            Segments.Add(NewPipeSegment);
-        }
-
-        public string WriteOutput()
-        {
-            string NodeString = "[";
-            string BendRadiusString = "[";
-            double Do = Segments[0].DiameterOuter * 0.001;
-            double Di = Do - 2*Segments[0].WallThickness*0.001;
-
-            for (int i = 0; i < Segments.Count; i++)
-            {
-                NodeString += Segments[i].Coords1.Repr();
-                NodeString += i == Segments.Count - 1 ? "," + Segments[i].Coords2.Repr() : "";
-                NodeString += i == Segments.Count - 1 ? "]" : ",";
-
-                BendRadiusString += Convert.ToDouble(Segments[i].Parameter1)*Do;
-                BendRadiusString += i == Segments.Count - 1 ? "]" : ",";
-            }
-
-            var pipeString = new StringBuilder();
-            pipeString.AppendFormat("    // Pipe {1} (Id {2} to {3}){0}", Environment.NewLine, this.Name, this.Segments[0].UniqueId, this.Segments[Segments.Count-1].UniqueId);
-            pipeString.AppendFormat("    color(colorPipe){0}", Environment.NewLine);
-            pipeString.AppendFormat("    curvedPipe({1},{2},{3},{4},{5});{0}", Environment.NewLine, NodeString, Segments.Count, BendRadiusString, Do, Di);
-
-            return pipeString.ToString();
-
-            //Console.WriteLine(string.Format("This is a multi segment pipe component with {0} segments",Segments.Count));
-        }
-        public bool HasId(string UniqueIdToLookFor)
-        {
-            bool Result = false;
-            foreach (ComponentPipeSegment Segment in Segments)
-            {
-                if (Segment.UniqueId == UniqueIdToLookFor)
-                {
-                    Result = true;
-                    break;
-                }
-            }
-            return Result;
-        }
-
-        private int GetSegmentIndex(string UniqueIdToLookFor)
+        /// <summary>
+        /// Method that returns the index of a certain segment
+        /// </summary>
+        /// <param name="UniqueIdToLookFor">A string with the segment id</param>
+        /// <returns>An integer representing the segment index or -1 if not found in component</returns>
+        public int IndexOf(string UniqueIdToLookFor)
         {
             int Result = -1;
             for (int i = 0; i < Segments.Count; i++)
@@ -675,64 +667,672 @@ namespace PipeLineComponents
             return Result;
         }
 
-        public new void SetCoordinates(CoordsXYZ NewCoords, int Node, string SegmentId = "")
+        /// <summary>
+        /// Method that returns the index of a certain segment
+        /// </summary>
+        /// <param name="SegmentToLookFor">The segment object to look for</param>
+        /// <returns>An integer representing the segment index or -1 if not found in component</returns>
+        public int IndexOf(BaseSegment SegmentToLookFor)
         {
-            int segmentIndex = GetSegmentIndex(SegmentId);
-
-            if (segmentIndex == -1) {
-                Console.WriteLine(string.Format("SegmentId {0} not found in {1}", SegmentId, Name));
-                return;
-            }
-
-            // Assign coordinates to segment with ID 'SegmentId'
-            Segments[segmentIndex].SetCoordinates(new CoordsXYZ(NewCoords.X, NewCoords.Y, NewCoords.Z), Node);
-            
-            // Assign coordinates from segment after segment with ID 'SegmentId' to last segment
-            for (int i = segmentIndex+1; i < Segments.Count; i++)
+            int Result = -1;
+            for (int i = 0; i < Segments.Count; i++)
             {
-                Segments[i].SetCoordinates(Segments[i - 1].Coords2, 1);
-            }
-
-            // Assign coordinates from segment before segment with ID 'SegmentId' to first segment
-            for (int i = segmentIndex - 1; i >= 0; i--)
-            {
-                Segments[i].SetCoordinates(Segments[i + 1].Coords1, 2);
-            }
-
-            // Assign global end coordinates X1, X2, ..., Z2
-            Coords1 = Segments[0].Coords1;
-            Coords2 = Segments[Segments.Count - 1].Coords2;
-
-            CoordsIsSet = true;
-        }
-
-        public new CoordsXYZ GetCoordinates(int Node, string SegmentId)
-        {
-            CoordsXYZ Result = new CoordsXYZ();
-            foreach (ComponentPipeSegment segment in Segments)
-            {
-                if (segment.UniqueId == SegmentId)
+                if (Segments[i] == SegmentToLookFor)
                 {
-                    if (Node == 1) { return segment.Coords1; } else { return segment.Coords2; }
+                    Result = i;
+                    break;
                 }
             }
             return Result;
         }
+
+        /// <summary>
+        /// Iterator method to access all connections in the component
+        /// </summary>
+        /// <returns></returns>
+        public IEnumerable<BaseConnection> Connections(bool OnlyValidConnections = false)
+        {
+            foreach (BaseSegment segment in Segments)
+            {
+                foreach (BaseConnection connection in segment.Connections)
+                {
+                    if (OnlyValidConnections == false)
+                        yield return connection;
+                    else
+                        if (connection.TargetSegment != null) yield return connection;
+                }
+            }
+        }
     }
 
-    public class ComponentPipeSegment : BaseComponent , IPipeLineComponent
+    /// <summary>
+    /// Class that reads and stores the segment properties (one line of input). A segment is a subset of a component that contains one or more segments.
+    /// </summary>
+    public class BaseSegment
     {
-        public ComponentPipeSegment(string InputString) : base(InputString) { }
+        private string name;
 
-        public bool HasId(string UniqueId)
+        /// <summary>The name of the segment</summary>
+        /// <value>Name</value>
+        public string Name
         {
-            throw new NotImplementedException();
+            get { return name; }
+            set
+            {
+                // If name contains a .scad extension, add to filename
+                if (value.Right(5) == ".scad")
+                {
+                    Filename = value;
+                    name = value.Substring(0, value.Length - 5);
+                }
+                else
+                    name = value;
+
+            }
         }
 
-        public string WriteOutput()
+        /// <summary>The unique id of the segment. Used to establish connections.</summary>
+        /// <value>Unique Id</value>
+        public string UniqueId { get; set; }
+
+        /// <summary>The type of the segment. Pipe, valve etc.</summary>
+        /// <value>Type</value>
+        public string Type { get; set; }
+
+        /// <summary>
+        /// The filename of the .scad file to be used as a main template. Located in the a subfolder to the input file (usually named 'Components')
+        /// The file contains OpenSCAD input for a segment oriented in the positive x-axis.
+        /// </summary>
+        /// <value>A absolute path to the .scad file. Null if not set.</value>
+        public string Filename { get; set; }
+
+        /// <summary>
+        /// The filename of the .scad file to be used as a main template. Located in the 'Components\'-directory of the .exe location.
+        /// </summary>
+        /// <value>A absolute path to the .scad file.</value>
+        public string TemplateMain { get; set; }
+
+        /// <summary>
+        /// Object that stores the segment template information (OpenSCAD code written with keywords instead of actual values)
+        /// </summary>
+        public BaseTemplate Template { get; set; }
+
+        /// <summary>The length of the segment in meters</summary>
+        /// <value>Length</value>
+        public double Length { get; set; }
+
+        /// <summary>The vertical angle of the segment. Between -90 and +90 degrees.</summary>
+        /// <value>Vertical angle</value>
+        public double AngleVertical { get; set; }
+
+        /// <summary>The azimuthal angle of the segment. Between 0 and 360 degrees. 0 degrees is towards the +x-axis, 90 degrees is towards +y-axis and so on.</summary>
+        /// <value>Azimuthal angle</value>
+        public double AngleAzimuthal { get; set; }
+
+        /// <summary>The angle around the segment axis/center. Used for instance to align the valve bonnet. Between 0 and 360 degrees.</summary>
+        /// <value>Angle around the segment axis/center.</value>
+        public double AngleAxis { get; set; }
+
+        /// <summary>Discrete x-coordinate change over the segment (in addition to that given by the length and the angles)</summary>
+        /// <value>Additional change in x-direction</value>
+        public double Dx { get; set; }
+
+        /// <summary>Discrete y-coordinate change over the segment (in addition to that given by the length and the angles)</summary>
+        /// /// <value>Additional change in y-direction</value>
+        public double Dy { get; set; }
+
+        /// <summary>Discrete z-coordinate change over the segment (in addition to that given by the length and the angles)</summary>
+        /// /// <value>Additional change in z-direction</value>
+        public double Dz { get; set; }
+
+        /// <summary>The outer diameter in millimeters</summary>
+        /// <value>Outer diameter [mm]</value>
+        public double DiameterOuter { get; set; }
+
+        /// <summary>The wall thickness in millimeters</summary>
+        /// <value>Wall thickness [mm]</value>
+        public double WallThickness { get; set; }
+
+        /// <summary>Parameter 1 for the segment. Used differently depending on type of component. For Pipe this is the bend radius r/Do.</summary>
+        /// <value>
+        /// For Pipe: r/Do&#xA;
+        /// For Valve: Apparent length
+        /// </value>
+        public double Parameter1 { get; set; }
+
+        /// <summary>Parameter 2 for the segment.</summary>
+        public double Parameter2 { get; set; }
+
+        /// <summary>The absolute coordinates (xyz) of node 1 (inlet) of the segment</summary>
+        public CoordsXYZ Coords1 { get; set; }
+
+        /// <summary>The absolute coordinates (xyz) of node 2 (outlet) of the segment</summary>
+        public CoordsXYZ Coords2 { get; set; }
+
+        /// <summary>A list with the connections of the segment</summary>
+        public List<BaseConnection> Connections { get; set; }
+
+        /// <summary>The BaseComponent object current segment is a child of</summary>
+        public BaseComponent Parent { get; set; }
+
+        /// <summary>
+        /// Constructor of a segment. Takes input in the form of a semi colon separated string.
+        /// </summary>
+        /// <param name="InputString"></param>
+        public BaseSegment(string InputString)
         {
-            return "";
+            string[] inputWords = InputString.Split(';');
+            Coords1 = new CoordsXYZ();
+            Coords2 = new CoordsXYZ();
+            Connections = new List<BaseConnection>();
+
+            if (inputWords.Length >= 18)
+            {
+                Type = inputWords[0];
+                UniqueId = inputWords[1];
+                Length = Convert.ToDouble(inputWords[2]);
+                AngleVertical = Convert.ToDouble(inputWords[3]);
+                AngleAzimuthal = Convert.ToDouble(inputWords[4]);
+                AngleAxis = Convert.ToDouble(inputWords[5]);
+                Dx = Convert.ToDouble(inputWords[6]);
+                Dy = Convert.ToDouble(inputWords[7]);
+                Dz = Convert.ToDouble(inputWords[8]);
+                DiameterOuter = Convert.ToDouble(inputWords[9]) * 0.001;
+                WallThickness = Convert.ToDouble(inputWords[10]) * 0.001;
+                Name = inputWords[11];
+
+                Connections.Add(new BaseConnection(this, 1, inputWords[12], inputWords[13]));
+                Connections.Add(new BaseConnection(this, 2, inputWords[14], inputWords[15]));
+
+                
+                if (!Double.TryParse(inputWords[16], out double i))
+                    i = -1;
+                Parameter1 = i;
+
+                if (!Double.TryParse(inputWords[17], out i))
+                    i = -1;
+                Parameter2 = i;
+            }
+        }
+
+        /// <summary>
+        /// Sets the segment coordinates
+        /// </summary>
+        /// <param name="NewCoords">The new coordinates to set to segment</param>
+        /// <param name="Node">The location (node 1 or 2, inlet or outlet) where the coordinates apply</param>
+        public void SetCoordinates(CoordsXYZ NewCoords, int Node)
+        {
+            double deg2rad = Math.PI / 180;
+            switch (Node)
+            {
+                case 1:
+                    Coords1.X = NewCoords.X; Coords1.Y = NewCoords.Y; Coords1.Z = NewCoords.Z;
+                    Coords2.X = Coords1.X + Length * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad) + Dx;
+                    Coords2.Y = Coords1.Y - Length * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad) + Dy;
+                    Coords2.Z = Coords1.Z + Length * Math.Sin(AngleVertical * deg2rad) + Dz;
+                    break;
+                case 2:
+                    Coords2.X = NewCoords.X; Coords2.Y = NewCoords.Y; Coords2.Z = NewCoords.Z;
+                    Coords1.X = Coords2.X - Length * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad) - Dx;
+                    Coords1.Y = Coords2.Y + Length * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad) - Dy;
+                    Coords1.Z = Coords2.Z - Length * Math.Sin(AngleVertical * deg2rad) - Dz;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Returns the CoordsXYZ of the segment (Coords1 or Coords2 depending on the node)
+        /// </summary>
+        /// <param name="Node">The node</param>
+        /// <returns></returns>
+        public CoordsXYZ GetCoordinates(int Node)
+        {
+            return (Node == 1) ? Coords1 : Coords2;
         }
     }
 
+    /// <summary>
+    /// A class containing connection information (source segment and node and target segment and node). A connection is a subset of a segment.
+    /// </summary>
+    public class BaseConnection
+    {
+        /// <summary>A string with the unique id of the target of the connection</summary>
+        public string TargetId { get; set; }
+
+        /// <summary>The node on the target where the connection attaches (1 or 2, inlet or outlet)</summary>
+        public int TargetNode { get; set; }
+
+        /// <summary>The node on the source where the connection attaches (1 or 2, inlet or outlet)</summary>
+        public int SourceNode { get; set; }
+
+        /// <summary>The BaseSegment object of the target</summary>
+        public BaseSegment TargetSegment { get; set; }
+
+        /// <summary>The BaseSegment object of the source</summary>
+        public BaseSegment SourceSegment { get; set; }
+
+        /// <value>Returns true if connection is made</value>
+        public bool ConnectionMade
+        {
+            get
+            {
+                if (TargetSegment == null && TargetId != "-")
+                    return false;
+                else
+                    return true;
+            }
+        }
+
+        /// <summary>
+        /// constructor for a connection object
+        /// </summary>
+        /// <param name="SourceSegment">The segment object of the source</param>
+        /// <param name="SourceNode">The node where the connection attaches on the source segment</param>
+        /// <param name="TargetId">The unique id of the target segment</param>
+        /// <param name="TargetNode">The node where the connection attaches on the target segment</param>
+        public BaseConnection(BaseSegment SourceSegment, int SourceNode, string TargetId, int TargetNode)
+        {
+            this.TargetId = TargetId;
+            this.TargetNode = TargetNode;
+            this.SourceNode = SourceNode;
+            this.SourceSegment = SourceSegment;
+        }
+
+        /// <summary>
+        /// Constructor for a connection object
+        /// </summary>
+        /// <param name="SourceSegment">The segment object of the source</param>
+        /// <param name="SourceNode">The node where the connection attaches on the source segment</param>
+        /// <param name="TargetId">The unique id of the target segment</param>
+        /// <param name="TargetNode">The node where the connection attaches on the target segment</param>
+        public BaseConnection(BaseSegment SourceSegment, int SourceNode, string TargetId, string TargetNode)
+        {
+            this.TargetId = TargetId;
+            if (!Int32.TryParse(TargetNode, out int i))
+                i = -1;
+
+            this.TargetNode = i;
+            this.SourceNode = SourceNode;
+            this.SourceSegment = SourceSegment;
+        }
+
+        /// <summary>
+        /// Methods that checks if coords of source and target segment nodes are within tolerance
+        /// </summary>
+        /// <param name="Tolerance">The specified tolerance for x, y and z-direction.</param>
+        /// <returns></returns>
+        public bool CoordsWithinTolerance(double Tolerance = 0.01)
+        {
+            var difference = SourceSegment.GetCoordinates(SourceNode) - TargetSegment.GetCoordinates(TargetNode);
+            if (Math.Abs(difference.X) > Tolerance || Math.Abs(difference.Y) > Tolerance || Math.Abs(difference.Z) > Tolerance)
+                return false;
+            else
+                return true;
+        }
+
+        /// <summary>
+        /// Returns a string representation of the connection object for debug purpose
+        /// </summary>
+        /// <returns>A string</returns>
+        public string Repr() { return string.Format("[SourceName={0},SourceId={1},SourceNode={2},TargetId={3},TargetNode={4}]", SourceSegment.Name, SourceSegment.UniqueId, SourceNode, TargetSegment.UniqueId, TargetNode); }
+    }
+
+    /// <summary>
+    /// Class containing the template information and methods. That is: information on how to use the information stored in the component
+    /// and segments to generate output.
+    /// Both component objects and segment objects have a template object and if or not it has a BaseSegment object or not
+    /// determines how the output is generated
+    /// </summary>
+    public class BaseTemplate
+    {
+        private string _readText = "";
+
+        private readonly BaseComponent Component;
+        private readonly BaseSegment Segment;
+
+        public IDictionary<string, string> KeywordsAndValues = new Dictionary<string, string>();
+
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="Component">The parent component of the template</param>
+        /// <param name="Segment">The parent segment of the template. If it is a component template Segment = null</param>
+        /// <param name="Filename">The filename (full path) of the file to be read and used as a template.</param>
+        public BaseTemplate(BaseComponent Component, BaseSegment Segment = null, string Filename = "")
+        {
+            this.Component = Component;
+            this.Segment = Segment;
+            if (Filename != "")
+                ReadTemplateFile(Filename);
+
+            if (Segment != null)
+            {
+                KeywordsAndValues.Add("LENGTH", this.Segment.Length.ToString());
+                KeywordsAndValues.Add("DO", this.Segment.DiameterOuter.ToString());
+                KeywordsAndValues.Add("WALLTHICKNESS", this.Segment.WallThickness.ToString());
+                KeywordsAndValues.Add("PARAM1", this.Segment.Parameter1.ToString());
+                KeywordsAndValues.Add("ANGLE_VERTICAL", this.Segment.AngleVertical.ToString());
+                KeywordsAndValues.Add("ANGLE_AZIMUTHAL", this.Segment.AngleAzimuthal.ToString());
+                KeywordsAndValues.Add("ANGLE_AXIS", this.Segment.AngleAxis.ToString());
+                KeywordsAndValues.Add("COORDS1_LOC", this.Segment.Coords1.Repr(Component.Coords1));
+            }
+        }
+
+        /// <summary>
+        /// Reads a file that is to be used as a template. Lines with "// REMOVE"-string will not be read.
+        /// </summary>
+        /// <param name="Filename">The filename (full path) of the file to be read and used as a template.</param>
+        public void ReadTemplateFile(string Filename)
+        {
+            if (File.Exists(Filename) == false)
+                WriteTemplateFile(Filename);
+
+            var readSegment = new StringBuilder();
+
+            try
+            {   // Open the text file using a stream reader.
+                using (StreamReader sr = new StreamReader(Filename))
+                {
+                    string line = String.Empty;
+                    while ((line = sr.ReadLine()) != null)
+                    {
+                        if (line.IndexOf("// REMOVE") == -1)
+                            readSegment.AppendLine(line);
+                    }
+                }
+
+            }
+            catch (IOException e)
+            {
+                Console.WriteLine("The file could not be read:");
+                Console.WriteLine(e.Message);
+                readSegment.AppendFormat("// Error, {1} could not be read.{0}", Environment.NewLine, Filename);
+            }
+            _readText = readSegment.ToString().TrimEnd(Environment.NewLine.ToCharArray());
+        }
+
+        /// <summary>
+        /// Returns a string with a complete component OpenSCAD input
+        /// </summary>
+        /// <param name="IndentLevel">The desired indentation level (0, 1, 2, etc) of the component output. Default is 0.</param>
+        /// <returns>A string</returns>
+        public string OutputComponent(int IndentLevel = 0)
+        {
+            var output = new StringBuilder();
+
+            // If no segment is given - return output for whole component
+            output.AppendFormat("// Type={1}, Name={2}, Id={3}{0}", Environment.NewLine, Component.Type, Component.Name, Component.Segments[0].UniqueId);
+            output.AppendFormat("color(\"{1}\"){0}", Environment.NewLine, Component.Color);
+            output.AppendFormat("translate({1}){0}", Environment.NewLine, Component.Coords1.Repr());
+            output.AppendFormat("{{ {0}", Environment.NewLine);
+
+            if (_readText != "") // If component consists of one multi-segment template file 
+            {
+                var componentRead = _readText;
+                componentRead = componentRead.Insert(0, new string(' ', 4));
+                componentRead = componentRead.Replace(Environment.NewLine, Environment.NewLine + new String(' ', 4));  // Add 1 level of indent
+                output.AppendLine(componentRead);
+            }
+            else  // If component consists of one or several single-segment template files
+            {
+                foreach (BaseSegment segment in Component.Segments)
+                    output.AppendLine(segment.Template.OutputSegment(1));
+            }
+            output.AppendFormat("}} {0}", Environment.NewLine);
+
+            // Add requested indent before every line
+            output.Insert(0, new string(' ', 4 * IndentLevel));
+            output.Replace(Environment.NewLine, Environment.NewLine + new String(' ', 4 * IndentLevel));
+
+            return ReplaceKeywords(output.ToString());
+        }
+
+        /// <summary>
+        /// Returns a string with a segment OpenSCAD input constructed from a template.
+        /// </summary>
+        /// <param name="IndentLevel">The desired indentation level (0, 1, 2, etc) of the component output. Default is 0.</param>
+        /// <param name="OutputKeywords">(Optional) If false then keywords are replaced with their corresponding values. Default is false.</param>
+        /// <returns>A string</returns>
+        public string OutputSegment(int IndentLevel = 0, bool OutputKeywords = false)
+        {
+            var output = new StringBuilder();
+
+            //output.AppendFormat("translate({1}){0}", Environment.NewLine, Segment.Coords1.Repr(Component.Coords1));
+            output.AppendFormat("translate((COORDS1_LOC)){0}", Environment.NewLine);
+            //output.AppendFormat("rotate([{1},{2},{3}]){0}", Environment.NewLine, Segment.AngleAxis, -Segment.AngleVertical, Segment.AngleAzimuthal);
+            output.AppendFormat("rotate([(ANGLE_AXIS),-1*(ANGLE_VERTICAL),-1*(ANGLE_AZIMUTHAL)]){0}", Environment.NewLine);
+            output.AppendFormat("{{ {0}", Environment.NewLine);
+
+            var segmentRead = _readText;
+            segmentRead = segmentRead.Insert(0, new string(' ', 4));
+            segmentRead = segmentRead.Replace(Environment.NewLine, Environment.NewLine + new String(' ', 4));  // Add 1 level of indent
+
+            output.AppendLine(segmentRead);
+            output.AppendFormat("}} {0}", "");  //Environment.NewLine);
+
+            // Add requested indent before every line
+            output.Insert(0, new string(' ', 4 * IndentLevel));
+            output.Replace(Environment.NewLine, Environment.NewLine + new String(' ', 4 * IndentLevel));
+
+            if (OutputKeywords == false)
+                return ReplaceKeywords(output.ToString());
+            else
+                return output.ToString();
+        }
+
+        /// <summary>
+        /// Writes template to file
+        /// </summary>
+        /// <param name="Filename">The full path of the file to be created.</param>
+        public void WriteTemplateFile(string Filename)
+        {
+            FileStream f = new FileStream(Filename, FileMode.Create);
+            StreamWriter s = new StreamWriter(f);
+
+            if (Segment == null)  // Creates a multi-segment template file
+            {
+                Console.WriteLine(string.Format("- Creating multi segment template file = {0}", Filename));
+                s.WriteLine("$fn=50;  // REMOVE");
+                int ind = 0;
+                foreach (BaseSegment segment in Component.Segments)
+                {
+                    foreach (KeyValuePair<string, string> kvp in segment.Template.KeywordsAndValues)
+                        s.WriteLine(string.Format("{0}_{1} = {2}; // REMOVE", kvp.Key, ind, kvp.Value));
+
+                    ind += 1;
+                }
+                ind = 0;
+                foreach (BaseSegment segment in Component.Segments)
+                {
+                    var segmentText = segment.Template.OutputSegment(OutputKeywords: true);
+                    foreach (KeyValuePair<string, string> kvp in segment.Template.KeywordsAndValues)
+                    {
+                        segmentText = segmentText.Replace(string.Format("({0})", kvp.Key), string.Format("({0}_{1})", kvp.Key, ind));
+                    }
+
+                    s.WriteLine(segmentText);
+                    ind += 1;
+                }
+            }
+            else  // Creates a single-segment template file
+            {
+                Console.WriteLine(string.Format("- Creating single segment template file = {0}", Filename));
+                s.WriteLine("$fn=50;  // REMOVE");
+                foreach (KeyValuePair<string, string> kvp in Segment.Template.KeywordsAndValues)
+                    s.WriteLine(string.Format("{0} = {1}; // REMOVE", kvp.Key, kvp.Value));
+
+                s.WriteLine(_readText);
+            }
+
+            s.Close();
+            f.Close();
+        }
+
+        /// <summary>
+        /// Method that replaces keywords (LENGTH, DO, etc) within a string with its value
+        /// </summary>
+        /// <param name="str">The string containing keywords that are to be replaced with their values.</param>
+        /// <returns>A string where keywords are replaced with values.</returns>
+        private string ReplaceKeywords(string str)
+        {
+            var strOut = str;
+
+            // If a BaseSegment is associated with this BaseTemplate object
+            if (Segment != null)
+            {
+                foreach (KeyValuePair<string, string> kvp in Segment.Template.KeywordsAndValues)
+                    strOut = strOut.Replace(string.Format("({0})", kvp.Key), kvp.Value);
+            }
+
+            // Loop through every segment and replace keywords with indexes (LENGTH_0, LENGTH_1, etc)
+            // with their corresponding values.
+            var ind = -1;
+            foreach (BaseSegment segment in Component.Segments)
+            {
+                ind += 1;
+                foreach (KeyValuePair<string, string> kvp in segment.Template.KeywordsAndValues)
+                    strOut = strOut.Replace(string.Format("({0}_{1})", kvp.Key, ind), kvp.Value);
+            }
+
+            // If pipe component
+            var nodes = "[" + string.Join(",", Component.Segments.Select(BaseSegment => BaseSegment.Coords1.Repr(Component.Coords1)).ToList()) + "," + Component.Segments[Component.Segments.Count - 1].Coords2.Repr(Component.Coords1) + "]";
+            var bendradius = "[" + string.Join(",", Component.Segments.Select(BaseSegment => BaseSegment.Parameter1 * BaseSegment.DiameterOuter).ToList()) + "]";
+
+            strOut = strOut.Replace("(DO)", Component.Segments[0].DiameterOuter.ToString());
+            strOut = strOut.Replace("(WALLTHICKNESS)", Component.Segments[0].WallThickness.ToString());
+            strOut = strOut.Replace("(NODES)", nodes);
+            strOut = strOut.Replace("(BENDRADIUS)", bendradius);
+            strOut = strOut.Replace("(SEGMENTS)", string.Format("{0}", Component.Segments.Count));
+
+            return strOut;
+        }
+    }
+
+    /// <summary>
+    /// A class for the xyz coordinates
+    /// </summary>
+    public class CoordsXYZ
+    {
+        /// <summary>The x-coordinate</summary>
+        public double X { get; set; }
+        /// <summary>The y-coordinate</summary>
+        public double Y { get; set; }
+        /// <summary>The z-coordinate</summary>
+        public double Z { get; set; }
+
+        /// <summary>
+        /// Default constructor
+        /// </summary>
+        public CoordsXYZ() { }
+
+        /// <summary>
+        /// Constructor to initiate a default
+        /// </summary>
+        /// <param name="X0">x-coordinate</param>
+        /// <param name="Y0">y-coordinate</param>
+        /// <param name="Z0">z-coordinate</param>
+        public CoordsXYZ(double X0, double Y0, double Z0)
+        {
+            X = X0; Y = Y0; Z = Z0;
+        }
+
+        public static CoordsXYZ operator -(CoordsXYZ Object1, CoordsXYZ Object2)
+        {
+            return new CoordsXYZ(Object1.X - Object2.X, Object1.Y - Object2.Y, Object1.Z - Object2.Z);
+        }
+
+        /// <summary>
+        /// Returns the coordinate in a vector representation [x,y,z]
+        /// </summary>
+        /// <param name="Origin">(Optional) A CoordXYZ object with the origin of the local coordinates</param>
+        /// <returns>A String</returns>
+        public string Repr(CoordsXYZ Origin = null)
+        {
+            if (Origin == null)
+                Origin = new CoordsXYZ(0, 0, 0);
+            return string.Format("[{0:F4},{1:F4},{2:F4}]", X - Origin.X, Y - Origin.Y, Z - Origin.Z);
+        }
+    }
+
+    public class ReferenceVolume
+    {
+        public string SegmentId { get; }
+
+        public int Node { get; }
+
+        public CoordsXYZ Coords { get; }
+
+        public ReferenceVolume(string InputString)
+        {
+            string[] inputWords = InputString.Split(';');
+            SegmentId = inputWords[1];
+            
+            if (!Int32.TryParse(inputWords[2], out int Node))
+                Node = -1;
+            if (!Double.TryParse(inputWords[3], out double X))
+                X = -1;
+            if (!Double.TryParse(inputWords[4], out double Y))
+                Y = -1;
+            if (!Double.TryParse(inputWords[5], out double Z))
+                Z = -1;
+
+            this.Node = Node;
+            this.Coords = new CoordsXYZ(X, Y, Z);
+        }
+    }
+
+    public class Flowpath
+    {
+        public string Caption { get; }
+
+        public Flowpath(string InputString)
+        {
+            string[] inputWords = InputString.Split(';');
+            Caption = inputWords[1];
+        }
+    }
+}
+
+
+
+
+namespace Bloat
+{
+    /// <summary>
+    /// Extends string class with left and right methods
+    /// </summary>
+    public static class DataTypeExtensions
+    {
+        #region Methods
+
+        /// <summary>
+        /// Returns the left part of the string
+        /// </summary>
+        /// <param name="str"></param>
+        /// <param name="length"></param>
+        /// <returns></returns>
+        public static string Left(this string str, int length)
+        {
+            str = (str ?? string.Empty);
+            return str.Substring(0, Math.Min(length, str.Length));
+        }
+
+        /// <summary>
+        /// Returns the right part of the string
+        /// </summary>
+        /// <param name="str"></param>
+        /// <param name="length"></param>
+        /// <returns></returns>
+        public static string Right(this string str, int length)
+        {
+            str = (str ?? string.Empty);
+            return (str.Length >= length)
+                ? str.Substring(str.Length - length, length)
+                : str;
+        }
+
+        #endregion
+    }
 }
