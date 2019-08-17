@@ -46,39 +46,11 @@ namespace PipePlot
             }
             
 
-            XlsPipePlotMain xlsPipePlot = new XlsPipePlotMain();
+            XlsPipePlotMain xlsPipePlot = new XlsPipePlotMain(fileNameInput);
 
-            Console.WriteLine("STEP 1: READING FROM FILE");
-            xlsPipePlot.ReadFile(fileNameInput);
-
-            Console.WriteLine("STEP 2: FINDING CONNECTIONS");
-            xlsPipePlot.ConnectSystem();
-
-            Console.WriteLine("STEP 3: ASSIGNING COORDS");
-            xlsPipePlot.AssignCoordinates(xlsPipePlot.Components[0], xlsPipePlot.Components[0].Segments[0].UniqueId, 1, new CoordsXYZ(0.00, 5.00, 100.0));
-
-            Console.WriteLine("STEP 4: ASSIGNING SEGMENT FILES FROM MAIN AND LOCAL COMPONENT LIBRARY");
-            xlsPipePlot.AssignFiles();
-
-            /*foreach (BaseComponent component in xlsPipePlot.Components)
-            {
-                Console.WriteLine(component.WriteOutput());
-                Console.WriteLine();
-            }*/
-
-            //Console.Read();
-            //Environment.Exit(1);
 
             Console.WriteLine("STEP 5: WRITING TO FILE");
             xlsPipePlot.WriteToFile(fileNameOutput);
-
-            foreach (BaseComponent component in xlsPipePlot.Components)
-            {
-                foreach (BaseSegment segment in component.Segments)
-                {
-                    Console.WriteLine(string.Format("{0} Coords1={1}, Coords2={2}", segment.UniqueId, segment.Coords1.Repr(), segment.Coords2.Repr()));
-                }
-            }
 
             Console.WriteLine("Press any key to quit");
             Console.Read();
@@ -95,11 +67,38 @@ namespace PipePlot
 
         public List<BaseComponent> Components = new List<BaseComponent>();
 
-        private MyLogger logger = new MyLogger();
+        public List<ReferenceVolume> RefVols = new List<ReferenceVolume>();
 
-        public XlsPipePlotMain()
+        public IDictionary<int, string> Flowpaths = new Dictionary<int, string>();
+
+        private readonly MyLogger logger = new MyLogger(Level: 3);
+
+        public XlsPipePlotMain(string Filename)
         {
-            logger.Level = 3;
+            Console.WriteLine("STEP 1: READING FROM FILE");
+            ReadFile(Filename);
+
+            Console.WriteLine("STEP 2: FINDING CONNECTIONS");
+            ConnectSystem();
+
+            Console.WriteLine("STEP 3: ASSIGNING COORDS");
+            foreach (ReferenceVolume referenceVolume in RefVols)
+            {
+                foreach (BaseComponent component in Components)
+                {
+                    if (component.IndexOf(referenceVolume.SegmentId) != -1)
+                        AssignCoordinates(component, referenceVolume.SegmentId, referenceVolume.Node, referenceVolume.Coords);
+                }    
+            }
+            if (RefVols.Count == 0)
+            {
+                logger.Warning("No reference volume given. Setting Node 1 of {0} to (x,y,z)=(0,0,0)", Components[0].Segments[0].UniqueId);
+                AssignCoordinates(Components[0], Components[0].Segments[0].UniqueId, 1, new CoordsXYZ(0, 0, 0));
+            }
+            
+
+            Console.WriteLine("STEP 4: ASSIGNING SEGMENT FILES FROM MAIN AND LOCAL COMPONENT LIBRARY");
+            AssignFiles();
         }
 
         /// <summary>
@@ -130,6 +129,7 @@ namespace PipePlot
                             case "Tank":
                             case "Valve":
                             case "Connection":
+                            case "Reducer":
                             case "Conn":
                                 currentSegment = new BaseSegment(line);
                                 logger.Write("{0}, ", currentSegment.UniqueId);
@@ -149,18 +149,12 @@ namespace PipePlot
                                         newReducer.Segments[0].Type = "Reducer";
                                         newReducer.Segments[0].UniqueId = "-";
                                         newReducer.Segments[0].Length = 0.00;
+                                        newReducer.Segments[0].DiameterOuter = previousSegment.DiameterOuter;
+                                        newReducer.Segments[0].Parameter1 = currentSegment.DiameterOuter;
                                         if (previousSegment.DiameterOuter <= currentSegment.DiameterOuter)
-                                        {
-                                            newReducer.Segments[0].DiameterOuter = previousSegment.DiameterOuter;
-                                            newReducer.Segments[0].Parameter1 = currentSegment.DiameterOuter;
                                             newReducer.Segments[0].Filename = "ReducerStraightExp.scad";
-                                        }
                                         else
-                                        {
-                                            newReducer.Segments[0].DiameterOuter = previousSegment.DiameterOuter;
-                                            newReducer.Segments[0].Parameter1 = currentSegment.DiameterOuter;
                                             newReducer.Segments[0].Filename = "ReducerStraightRed.scad";
-                                        }
                                         
                                         newReducer.Segments[0].Connections[0].TargetSegment = previousSegment;
                                         newReducer.Segments[0].Connections[1].TargetSegment = currentSegment;
@@ -178,8 +172,14 @@ namespace PipePlot
                                         Components[Components.Count - 1].AddSegment(currentSegment);
                                     }
                                 }
+                                break;
 
-                                //logger.Write("{0}, ", newPipeSegment.UniqueId);
+                            case "Refvol":
+                                RefVols.Add(new ReferenceVolume(line));
+                                break;
+
+                            case "Flowpath":
+                                Flowpaths.Add(Components.Count, inputs[1]);
                                 break;
 
                             default:
@@ -255,7 +255,7 @@ namespace PipePlot
         public void AssignFiles()
         {
             IDictionary<string, string> defaultTemplateFiles = new Dictionary<string, string>()
-                                            { {"Tank","TankDefault.scad"}, {"Valve", "ValveDefault.scad"}, {"Reducer","ReducerStraightRed.scad"}, {"Connection", "Cylinder.scad"} };
+                                            { {"Tank","TankDefault.scad"}, {"Valve", "ValveDefault.scad"}, {"Reducer","ReducerStraight.scad"}, {"Connection", "Cylinder.scad"} };
             IDictionary<string, string> defaultColors = new Dictionary<string, string>()
                                             { {"Pipe","grey"}, {"Tank","grey"}, {"Valve", "red"}, {"Reducer","red"}, {"Connection", "red"} };
 
@@ -267,10 +267,9 @@ namespace PipePlot
                     segment.Template = new BaseTemplate(component, segment);
 
                 // Set default colors
-                string defaultColor;
                 if (component.Color == null)
                 {
-                    if (!defaultColors.TryGetValue(component.Type, out defaultColor))
+                    if (!defaultColors.TryGetValue(component.Type, out string defaultColor))
                         defaultColor = "green";
                     component.Color = defaultColor;
                 }
@@ -315,8 +314,6 @@ namespace PipePlot
                             localFilenames.Add(segment.Filename);
                         }
                     }
-
-                    
                 }
 
                 localFilenames = localFilenames.Distinct().ToList();
@@ -324,7 +321,6 @@ namespace PipePlot
                 // Update component template with information from from specified template files
                 if (localFilenames.Count == 1 && component.Segments.Count > 1)
                 {
-                    Console.WriteLine("Component has one local unique filename: " + localFilenames[0]);
                     component.Filename = localFilenames[0];
 
                     // Update component template with information read from local file (if file doesn't exists it is created)
@@ -341,8 +337,10 @@ namespace PipePlot
         }
 
         /// <summary>
-        /// Recursive method to 1) Assign coordinates to component, 2) Loop through its connections and run this method on these
-        /// and 3) Loop through every connection in all components and see if they attach to this component
+        /// Recursive method to 
+        /// 1) Assign coordinates to component (exit if already done), 
+        /// 2) Loop through its connections and run this method on these and...
+        /// 3) Loop through every connection in all components and see if they attach to this component
         /// </summary>
         /// <param name="CoordsToSet">The coordinates to assign to the component</param>
         /// <param name="Node">The node (1 or 2, inlet or outlet) where the coordinates apply</param>
@@ -355,23 +353,11 @@ namespace PipePlot
             // If component coord is already set, quit
             if (CurrentComponent.CoordsIsSet == true)
             {
-                var segmentIndex = CurrentComponent.IndexOf(SegmentId);
-                if (segmentIndex != -1)
-                {
-                    var coordsAlreadySet = (Node == 1) ? CurrentComponent.Segments[segmentIndex].Coords1 : CurrentComponent.Segments[segmentIndex].Coords2;
-                    var differ = CoordsToSet - coordsAlreadySet;
-                    if (Math.Abs(differ.X)>0.001 || Math.Abs(differ.Y) > 0.001 || Math.Abs(differ.Z) > 0.001)
-                    {
-                        logger.Warning("Loop check failed for Id={3} (dx={0}, dy={1}, dz={2})", differ.X, differ.Y, differ.Z, SegmentId);
-                    }
-                }
-                // TODO: Add loop check here to see f CoordsToSet ~= Segment.Coords1 or .Coords2
                 logger.Debug("   - Coordinates already assigned");
                 return;
             }
             else
             {
-                logger.Warning("Setting coordinates for: {0}", CurrentComponent.TypeNameId);
                 CurrentComponent.SetCoordinates(SegmentId, Node, new CoordsXYZ(CoordsToSet.X, CoordsToSet.Y, CoordsToSet.Z));
                 logger.Debug("   - Coordinates of {0} set to Coords1={1} and Coords2={2}", CurrentComponent.Name, CurrentComponent.Coords1.Repr(), CurrentComponent.Coords2.Repr());
             }
@@ -419,7 +405,35 @@ namespace PipePlot
             s.WriteLine("colorValve = \"red\";");
             s.WriteLine("colorTank = \"grey\";");
             s.WriteLine("");
+            s.WriteLine("");
+            s.WriteLine("// Default flowpath");
+            s.WriteLine("scale([1000, 1000, 1000])");
+            s.WriteLine("{");
 
+            
+
+            foreach (BaseComponent component in Components)
+            {
+                // Write out a new flowpath the current index is present in the 'Flowpaths' dictionary.
+                if (Flowpaths.TryGetValue(Components.IndexOf(component), out string Caption))
+                {
+                    s.WriteLine("}");
+                    s.WriteLine("");
+                    s.WriteLine("");
+                    s.WriteLine(string.Format("// {0}", Caption));
+                    s.WriteLine("scale([1000, 1000, 1000])");
+                    s.WriteLine("{");
+                }
+                    
+                s.WriteLine(component.Template.OutputComponent(IndentLevel: 1));
+            }
+            s.WriteLine("}");
+            s.WriteLine("");
+            s.WriteLine("");
+
+            // Write out fauly connections (those where the source and the target coords are larger than tolerance) as 
+            // lines between source and target node (if any)
+            s.WriteLine("// Faulty connections");
             s.WriteLine("module line(start, end, thickness = 0.010)");
             s.WriteLine("{");
             s.WriteLine("    $fn=10;");
@@ -436,14 +450,10 @@ namespace PipePlot
 
             foreach (BaseComponent component in Components)
             {
-                s.WriteLine(component.WriteOutput());
-            }
-
-            foreach (BaseComponent component in Components)
-            {
-                foreach (BaseConnection connecton in component.Connections(OnlyValidConnections: true))
+                foreach (BaseConnection connection in component.Connections(OnlyValidConnections: true))
                 {
-                    s.WriteLine(string.Format("    line({0}, {1});", connecton.SourceSegment.GetCoordinates(connecton.SourceNode).Repr(), connecton.TargetSegment.GetCoordinates(connecton.TargetNode).Repr()));
+                    if (connection.CoordsWithinTolerance() == false)
+                        s.WriteLine(string.Format("    line({0}, {1});  // Connection {2} of {3}", connection.SourceSegment.GetCoordinates(connection.SourceNode).Repr(), connection.TargetSegment.GetCoordinates(connection.TargetNode).Repr(), connection.SourceNode, connection.SourceSegment.UniqueId));
                 }
             }
 
@@ -465,13 +475,14 @@ namespace PipePlot
         /// </summary>
         public int Level { get; set; }
 
-        /*
-        5. DEBUG
-        4. INFO
-        3. WARNING
-        2. ERROR
-        1. CRITICAL
-        */
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="Level">The level of what is to be output to screen. 5=Debug, 4=Info, 3=Warnings, 2=Error, 1=Critical</param>
+        public MyLogger(int Level)
+        {
+            this.Level = Level;
+        }
 
         /// <summary>
         /// Produces an error message
@@ -490,7 +501,11 @@ namespace PipePlot
         /// <param name="args">Arguments for the string.Format method</param>
         public void Warning(string format, params object[] args)
         {
-            if (Level >= 3) { Console.WriteLine(string.Format(format, args)); }
+            if (Level >= 3)
+            {
+                Console.Beep();
+                Console.WriteLine(string.Format(format, args));
+            }
         }
 
         /// <summary>
@@ -688,15 +703,6 @@ namespace PipeLineComponents
                 }
             }
         }
-
-        /// <summary>
-        /// Depending on what type of component, write out the OpenSCAD input for that component
-        /// </summary>
-        /// <returns>A string with output</returns>
-        public string WriteOutput()
-        {
-            return Template.OutputComponent(IndentLevel: 1);
-        }
     }
 
     /// <summary>
@@ -728,7 +734,7 @@ namespace PipeLineComponents
         /// <summary>The unique id of the segment. Used to establish connections.</summary>
         /// <value>Unique Id</value>
         public string UniqueId { get; set; }
-        
+
         /// <summary>The type of the segment. Pipe, valve etc.</summary>
         /// <value>Type</value>
         public string Type { get; set; }
@@ -831,15 +837,15 @@ namespace PipeLineComponents
                 Dx = Convert.ToDouble(inputWords[6]);
                 Dy = Convert.ToDouble(inputWords[7]);
                 Dz = Convert.ToDouble(inputWords[8]);
-                DiameterOuter = Convert.ToDouble(inputWords[9])*0.001;
-                WallThickness = Convert.ToDouble(inputWords[10])*0.001;
+                DiameterOuter = Convert.ToDouble(inputWords[9]) * 0.001;
+                WallThickness = Convert.ToDouble(inputWords[10]) * 0.001;
                 Name = inputWords[11];
 
                 Connections.Add(new BaseConnection(this, 1, inputWords[12], inputWords[13]));
                 Connections.Add(new BaseConnection(this, 2, inputWords[14], inputWords[15]));
 
-                double i;
-                if (!Double.TryParse(inputWords[16], out i))
+                
+                if (!Double.TryParse(inputWords[16], out double i))
                     i = -1;
                 Parameter1 = i;
 
@@ -862,13 +868,13 @@ namespace PipeLineComponents
                 case 1:
                     Coords1.X = NewCoords.X; Coords1.Y = NewCoords.Y; Coords1.Z = NewCoords.Z;
                     Coords2.X = Coords1.X + Length * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad) + Dx;
-                    Coords2.Y = Coords1.Y + Length * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad) + Dy;
+                    Coords2.Y = Coords1.Y - Length * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad) + Dy;
                     Coords2.Z = Coords1.Z + Length * Math.Sin(AngleVertical * deg2rad) + Dz;
                     break;
                 case 2:
                     Coords2.X = NewCoords.X; Coords2.Y = NewCoords.Y; Coords2.Z = NewCoords.Z;
                     Coords1.X = Coords2.X - Length * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad) - Dx;
-                    Coords1.Y = Coords2.Y - Length * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad) - Dy;
+                    Coords1.Y = Coords2.Y + Length * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad) - Dy;
                     Coords1.Z = Coords2.Z - Length * Math.Sin(AngleVertical * deg2rad) - Dz;
                     break;
                 default:
@@ -926,7 +932,7 @@ namespace PipeLineComponents
         /// <param name="SourceNode">The node where the connection attaches on the source segment</param>
         /// <param name="TargetId">The unique id of the target segment</param>
         /// <param name="TargetNode">The node where the connection attaches on the target segment</param>
-        public BaseConnection(BaseSegment SourceSegment, int SourceNode,string TargetId, int TargetNode)
+        public BaseConnection(BaseSegment SourceSegment, int SourceNode, string TargetId, int TargetNode)
         {
             this.TargetId = TargetId;
             this.TargetNode = TargetNode;
@@ -944,20 +950,33 @@ namespace PipeLineComponents
         public BaseConnection(BaseSegment SourceSegment, int SourceNode, string TargetId, string TargetNode)
         {
             this.TargetId = TargetId;
-            int i;
-            if (!Int32.TryParse(TargetNode, out i))
+            if (!Int32.TryParse(TargetNode, out int i))
                 i = -1;
-            
+
             this.TargetNode = i;
             this.SourceNode = SourceNode;
             this.SourceSegment = SourceSegment;
         }
 
         /// <summary>
+        /// Methods that checks if coords of source and target segment nodes are within tolerance
+        /// </summary>
+        /// <param name="Tolerance">The specified tolerance for x, y and z-direction.</param>
+        /// <returns></returns>
+        public bool CoordsWithinTolerance(double Tolerance = 0.01)
+        {
+            var difference = SourceSegment.GetCoordinates(SourceNode) - TargetSegment.GetCoordinates(TargetNode);
+            if (Math.Abs(difference.X) > Tolerance || Math.Abs(difference.Y) > Tolerance || Math.Abs(difference.Z) > Tolerance)
+                return false;
+            else
+                return true;
+        }
+
+        /// <summary>
         /// Returns a string representation of the connection object for debug purpose
         /// </summary>
         /// <returns>A string</returns>
-        public string Repr() { return string.Format("[SourceName={0},SourceId={1},SourceNode={2},TargetId={3},TargetNode={4}]", SourceSegment.Name,SourceSegment.UniqueId, SourceNode, TargetSegment.UniqueId, TargetNode); }
+        public string Repr() { return string.Format("[SourceName={0},SourceId={1},SourceNode={2},TargetId={3},TargetNode={4}]", SourceSegment.Name, SourceSegment.UniqueId, SourceNode, TargetSegment.UniqueId, TargetNode); }
     }
 
     /// <summary>
@@ -1023,7 +1042,7 @@ namespace PipeLineComponents
                             readSegment.AppendLine(line);
                     }
                 }
-                
+
             }
             catch (IOException e)
             {
@@ -1054,7 +1073,7 @@ namespace PipeLineComponents
                 var componentRead = _readText;
                 componentRead = componentRead.Insert(0, new string(' ', 4));
                 componentRead = componentRead.Replace(Environment.NewLine, Environment.NewLine + new String(' ', 4));  // Add 1 level of indent
-                output.AppendLine(componentRead); 
+                output.AppendLine(componentRead);
             }
             else  // If component consists of one or several single-segment template files
             {
@@ -1064,8 +1083,8 @@ namespace PipeLineComponents
             output.AppendFormat("}} {0}", Environment.NewLine);
 
             // Add requested indent before every line
-            output.Insert(0, new string(' ', 4*IndentLevel));
-            output.Replace(Environment.NewLine, Environment.NewLine + new String(' ', 4*IndentLevel));
+            output.Insert(0, new string(' ', 4 * IndentLevel));
+            output.Replace(Environment.NewLine, Environment.NewLine + new String(' ', 4 * IndentLevel));
 
             return ReplaceKeywords(output.ToString());
         }
@@ -1083,7 +1102,7 @@ namespace PipeLineComponents
             //output.AppendFormat("translate({1}){0}", Environment.NewLine, Segment.Coords1.Repr(Component.Coords1));
             output.AppendFormat("translate((COORDS1_LOC)){0}", Environment.NewLine);
             //output.AppendFormat("rotate([{1},{2},{3}]){0}", Environment.NewLine, Segment.AngleAxis, -Segment.AngleVertical, Segment.AngleAzimuthal);
-            output.AppendFormat("rotate([(ANGLE_AXIS),-1*(ANGLE_VERTICAL),(ANGLE_AZIMUTHAL)]){0}", Environment.NewLine);
+            output.AppendFormat("rotate([(ANGLE_AXIS),-1*(ANGLE_VERTICAL),-1*(ANGLE_AZIMUTHAL)]){0}", Environment.NewLine);
             output.AppendFormat("{{ {0}", Environment.NewLine);
 
             var segmentRead = _readText;
@@ -1092,7 +1111,7 @@ namespace PipeLineComponents
 
             output.AppendLine(segmentRead);
             output.AppendFormat("}} {0}", "");  //Environment.NewLine);
-            
+
             // Add requested indent before every line
             output.Insert(0, new string(' ', 4 * IndentLevel));
             output.Replace(Environment.NewLine, Environment.NewLine + new String(' ', 4 * IndentLevel));
@@ -1111,7 +1130,7 @@ namespace PipeLineComponents
         {
             FileStream f = new FileStream(Filename, FileMode.Create);
             StreamWriter s = new StreamWriter(f);
-            
+
             if (Segment == null)  // Creates a multi-segment template file
             {
                 Console.WriteLine(string.Format("- Creating multi segment template file = {0}", Filename));
@@ -1121,7 +1140,7 @@ namespace PipeLineComponents
                 {
                     foreach (KeyValuePair<string, string> kvp in segment.Template.KeywordsAndValues)
                         s.WriteLine(string.Format("{0}_{1} = {2}; // REMOVE", kvp.Key, ind, kvp.Value));
-                    
+
                     ind += 1;
                 }
                 ind = 0;
@@ -1132,7 +1151,7 @@ namespace PipeLineComponents
                     {
                         segmentText = segmentText.Replace(string.Format("({0})", kvp.Key), string.Format("({0}_{1})", kvp.Key, ind));
                     }
-                        
+
                     s.WriteLine(segmentText);
                     ind += 1;
                 }
@@ -1143,10 +1162,10 @@ namespace PipeLineComponents
                 s.WriteLine("$fn=50;  // REMOVE");
                 foreach (KeyValuePair<string, string> kvp in Segment.Template.KeywordsAndValues)
                     s.WriteLine(string.Format("{0} = {1}; // REMOVE", kvp.Key, kvp.Value));
-                
+
                 s.WriteLine(_readText);
             }
-            
+
             s.Close();
             f.Close();
         }
@@ -1202,7 +1221,7 @@ namespace PipeLineComponents
         public double Y { get; set; }
         /// <summary>The z-coordinate</summary>
         public double Z { get; set; }
-        
+
         /// <summary>
         /// Default constructor
         /// </summary>
@@ -1234,6 +1253,44 @@ namespace PipeLineComponents
             if (Origin == null)
                 Origin = new CoordsXYZ(0, 0, 0);
             return string.Format("[{0:F4},{1:F4},{2:F4}]", X - Origin.X, Y - Origin.Y, Z - Origin.Z);
+        }
+    }
+
+    public class ReferenceVolume
+    {
+        public string SegmentId { get; }
+
+        public int Node { get; }
+
+        public CoordsXYZ Coords { get; }
+
+        public ReferenceVolume(string InputString)
+        {
+            string[] inputWords = InputString.Split(';');
+            SegmentId = inputWords[1];
+            
+            if (!Int32.TryParse(inputWords[2], out int Node))
+                Node = -1;
+            if (!Double.TryParse(inputWords[3], out double X))
+                X = -1;
+            if (!Double.TryParse(inputWords[4], out double Y))
+                Y = -1;
+            if (!Double.TryParse(inputWords[5], out double Z))
+                Z = -1;
+
+            this.Node = Node;
+            this.Coords = new CoordsXYZ(X, Y, Z);
+        }
+    }
+
+    public class Flowpath
+    {
+        public string Caption { get; }
+
+        public Flowpath(string InputString)
+        {
+            string[] inputWords = InputString.Split(';');
+            Caption = inputWords[1];
         }
     }
 }
