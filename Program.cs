@@ -63,13 +63,19 @@ namespace PipePlot
     /// </summary>
     public class XlsPipePlotMain
     {
+        /// <summary>The main components library located in a subfolder to the executable.</summary>
         private string PathMain = AppDomain.CurrentDomain.BaseDirectory + "Components\\";
+
+        /// <summary>The local components library located in a subfolder to the input file.</summary>
         private string PathLocal = "C:\\Users\\Daniel\\Dropbox\\Programmering\\PipePlot\\Code\\Version1\\PipePlot\\LocComponents\\";
 
+        /// <summary>A list containing all components in the order they were read.</summary>
         public List<BaseComponent> Components = new List<BaseComponent>();
 
+        /// <summary>A list containing the reference volumes of each system.</summary>
         public List<ReferenceVolume> RefVols = new List<ReferenceVolume>();
 
+        /// <summary>A dictionary containing the flowpath captions. The key represent before what component index they are placed.</summary>
         public IDictionary<int, string> Flowpaths = new Dictionary<int, string>();
 
         /// <summary>
@@ -88,7 +94,7 @@ namespace PipePlot
         {
             PathLocal = Path.GetDirectoryName(Filename) + "\\Components\\";
             ReadFile(Filename);
-
+            
             System.IO.Directory.CreateDirectory(PathLocal);  // Create Pathlocal (TODO: Don't create the folder if no scad file are to be created)
 
             ConnectSystem();
@@ -125,11 +131,8 @@ namespace PipePlot
                         switch (inputs[0])
                         {
                             case "Pipe":
-                            case "Tank":
-                            case "Valve":
-                            case "Connection":
-                            case "Reducer":
-                            case "Conn":
+                            case "Volume":
+                            case "Component":
                                 currentSegment = new BaseSegment(line);
                                 Logger.Write("{0}, ", currentSegment.UniqueId);
 
@@ -196,6 +199,15 @@ namespace PipePlot
             }
 
             Logger.WriteLine("");
+
+            foreach (BaseComponent component in Components)
+            {
+                foreach (BaseSegment segment in component.Segments)
+                {
+                    Logger.WriteLine("{0}", segment.UniqueId);
+                }
+            }
+
         }
 
         /// <summary>
@@ -298,7 +310,7 @@ namespace PipePlot
                     segment.Template.ReadTemplateFile(PathMain + fn);
 
                     // Check if file exists first in local folder, then in main folder
-                    if (segment.Filename != null)
+                    if (segment.Filename != "")
                     {
                         // If template file exist in local folder AND main folder - use file in local folder
                         // If template file exist only in main folder - use this file
@@ -311,7 +323,7 @@ namespace PipePlot
                         else if (File.Exists(PathMain + segment.Filename) == true)
                         {
                             segment.Template.ReadTemplateFile(PathMain + segment.Filename);
-                            segment.Filename = null;
+                            segment.Filename = "";
                         }
                         else
                         {
@@ -335,7 +347,7 @@ namespace PipePlot
                 // Update segment template with information from from specified template files (both in local and main path)
                 foreach (BaseSegment segment in component.Segments)
                 {
-                    if (segment.Filename != null)
+                    if (segment.Filename != "")
                         segment.Template.ReadTemplateFile(segment.Filename);
                 }
             }
@@ -349,7 +361,7 @@ namespace PipePlot
             {
                 foreach (BaseComponent component in Components)
                 {
-                    if (component.IndexOf(referenceVolume.SegmentId) != -1)
+                    if (component.IndexOf(referenceVolume.SegmentId) != -1)   // TODO: If component already assigned coords produce an error message
                         SetCoordinates(component, referenceVolume.SegmentId, referenceVolume.Node, referenceVolume.Coords);
                 }
             }
@@ -705,6 +717,12 @@ namespace PipeLineComponents
         /// <summary>The type of the segment. Pipe, valve etc.</summary>
         public string Type { get; set; }
 
+        /// <summary>The drawing number. For information purpose only.</summary>
+        public string Drawing { get; set; }
+
+        /// <summary>Notes. For information purpose only.</summary>
+        public string Notes { get; set; }
+
         /// <summary>
         /// The filename of the .scad file to be used as a main template. Located in the a subfolder to the input file (usually named 'Components')
         /// The file contains OpenSCAD input for a segment oriented in the positive x-axis.
@@ -780,47 +798,54 @@ namespace PipeLineComponents
             Coords2 = new CoordsXYZ();
             Connections = new List<BaseConnection>();
 
-            if (inputWords.Length >= 18)
+            if (inputWords.Length >= 22)
             {
                 // Loop through all input values that supposed to be doubles and try converting them. Produce an error message if incorrect.
                 double tmpDbl;
                 List<int> notNumericList = new List<int>();
-                foreach (int index in new int[] {2, 3, 4, 5, 6, 7, 8, 9, 10})
+                foreach (int index in new int[] {5, 6,7,8,9,10,11,12,13})
                 {
                     if (!Double.TryParse(inputWords[index], out tmpDbl))
                         notNumericList.Add(index + 1);
                 }
                 if (notNumericList.Count > 0) Logger.Warning("{0}Input error: Word(s) {1} in {2} not numeric", Environment.NewLine, string.Join(", ", notNumericList), inputWords[1]);
 
-                Type = inputWords[0];
-                UniqueId = inputWords[1];
-                Name = inputWords[11];
+                Type = inputWords[1];
+                Name = inputWords[2];
+                UniqueId = inputWords[3];
+                Filename = inputWords[4];
+                Drawing = inputWords[20];
+                Notes = inputWords[21];
                 
-                if (!Double.TryParse(inputWords[2], out tmpDbl)) tmpDbl = 0.0;
-                Length = tmpDbl;
-                if (!Double.TryParse(inputWords[3], out tmpDbl)) tmpDbl = 0.0;
-                AngleVertical = tmpDbl;
-                if (!Double.TryParse(inputWords[4], out tmpDbl)) tmpDbl = 0.0;
-                AngleAzimuthal = tmpDbl;
                 if (!Double.TryParse(inputWords[5], out tmpDbl)) tmpDbl = 0.0;
-                AngleAxis = tmpDbl;
+                Length = tmpDbl;
                 if (!Double.TryParse(inputWords[6], out tmpDbl)) tmpDbl = 0.0;
-                Dx = tmpDbl;
+                AngleVertical = tmpDbl;
                 if (!Double.TryParse(inputWords[7], out tmpDbl)) tmpDbl = 0.0;
-                Dy = tmpDbl;
+                AngleAzimuthal = tmpDbl;
                 if (!Double.TryParse(inputWords[8], out tmpDbl)) tmpDbl = 0.0;
-                Dz = tmpDbl;
+                AngleAxis = tmpDbl;
                 if (!Double.TryParse(inputWords[9], out tmpDbl)) tmpDbl = 0.0;
-                DiameterOuter = tmpDbl * 0.001;
+                Dx = tmpDbl;
                 if (!Double.TryParse(inputWords[10], out tmpDbl)) tmpDbl = 0.0;
+                Dy = tmpDbl;
+                if (!Double.TryParse(inputWords[11], out tmpDbl)) tmpDbl = 0.0;
+                Dz = tmpDbl;
+                if (!Double.TryParse(inputWords[12], out tmpDbl)) tmpDbl = 0.0;
+                DiameterOuter = tmpDbl * 0.001;
+                if (!Double.TryParse(inputWords[13], out tmpDbl)) tmpDbl = 0.0;
                 WallThickness = tmpDbl * 0.001;
-                if (!Double.TryParse(inputWords[16], out tmpDbl)) tmpDbl = -1;
+                if (!Double.TryParse(inputWords[14], out tmpDbl)) tmpDbl = 0.0;
                 Parameter1 = tmpDbl;
-                if (!Double.TryParse(inputWords[17], out tmpDbl)) tmpDbl = -1;
+                if (!Double.TryParse(inputWords[15], out tmpDbl)) tmpDbl = 0.0;
                 Parameter2 = tmpDbl;
 
-                Connections.Add(new BaseConnection(this, 1, inputWords[12], inputWords[13]));
-                Connections.Add(new BaseConnection(this, 2, inputWords[14], inputWords[15]));
+                Connections.Add(new BaseConnection(this, 1, inputWords[16], inputWords[17]));
+                Connections.Add(new BaseConnection(this, 2, inputWords[18], inputWords[19]));
+            }
+            else
+            {
+                //Logger.Warning("Not enough words: '{0}'", InputString);
             }
         }
 
