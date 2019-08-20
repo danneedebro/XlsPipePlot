@@ -35,7 +35,7 @@ module pipeOrientate(v1,v2)
 	// complete the two rotations
     rotate(a=v1ang, v=v1axis)
 	  rotate(a=theta<0 || theta>0?theta:0, v=[0,0,1])
-         children(0);
+         child(0);
 }
 
 module pipeCurve(points,point,radii, od,id,isLastSegment=false) {
@@ -85,8 +85,18 @@ module pipeCurve(points,point,radii, od,id,isLastSegment=false) {
 
 module curvedPipe(points, segments, radii, od, id) {
 	union() {
-		for (point = [0:segments-2]) 
-			pipeCurve(points,point,radii,od,id);
+        if (segments > 1)
+        {
+            for (point = [0:segments-2]) 
+                pipeCurve(points,point,radii,od,id);
+        }
+        else
+        {
+            dir1 = subv(points[1],points[0]);
+            l1 = mod(dir1);
+            translate(points[0]) orientate(dir1) tube(h=l1,or=od/2, ir=id/2, center=false);
+            
+        }
 	}
 }
 
