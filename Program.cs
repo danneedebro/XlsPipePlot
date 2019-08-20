@@ -123,7 +123,6 @@ namespace PipePlot
                 {
                     // Read the stream to a string, and write the string to the console.
                     string line = String.Empty;
-                    Logger.Write("Reading: ");
                     while ((line = sr.ReadLine()) != null)
                     {
                         string[] inputs = line.Split(';');
@@ -134,7 +133,6 @@ namespace PipePlot
                             case "Volume":
                             case "Component":
                                 currentSegment = new BaseSegment(line);
-                                Logger.Write("{0}, ", currentSegment.UniqueId);
 
                                 if (currentSegment.Type != previousSegment.Type)
                                 {
@@ -197,17 +195,6 @@ namespace PipePlot
                 Console.WriteLine(e.Message);
                 Environment.Exit(1);
             }
-
-            Logger.WriteLine("");
-
-            foreach (BaseComponent component in Components)
-            {
-                foreach (BaseSegment segment in component.Segments)
-                {
-                    Logger.WriteLine("{0}", segment.UniqueId);
-                }
-            }
-
         }
 
         /// <summary>
@@ -229,7 +216,7 @@ namespace PipePlot
                 {
                     // If current connection is not made (only ID as string present and not segment object), look for it in the
                     //  other components
-                    if (connection.ConnectionMade == false)  
+                    if (connection.IsConnected == false)  
                     {
                         uniqueIdToLookFor = connection.TargetId;
                         connectionFound = false;
@@ -259,6 +246,9 @@ namespace PipePlot
                     }
                 }
             }
+            foreach (BaseComponent component in Components)
+                foreach (BaseConnection connection in component.Connections())
+                    Logger.Debug("Connection from node {0} of {1} connects to node {2} of {3}", connection.SourceNode, connection.SourceSegment.UniqueId, connection.TargetNode, connection.TargetSegment.UniqueId);
         }
 
 
@@ -384,7 +374,7 @@ namespace PipePlot
 
             foreach (BaseComponent component in Components)
             {
-                foreach (BaseConnection connection in component.Connections(OnlyValidConnections: true))
+                foreach (BaseConnection connection in component.Connections(OnlyCompleteConnections: true))
                 {
                     if (connection.CoordsWithinTolerance() == false)
                     {
@@ -423,7 +413,7 @@ namespace PipePlot
             }
                        
             // Loop through its connections to see what it connects to - assign Coordinates to these
-            foreach (BaseConnection connection in CurrentComponent.Connections(OnlyValidConnections: true))
+            foreach (BaseConnection connection in CurrentComponent.Connections(OnlyCompleteConnections: true))
             {
                 var CoordsToSetToConnectingComponent = connection.SourceNode == 1 ? connection.SourceSegment.Coords1 : connection.SourceSegment.Coords2;
                 
@@ -434,7 +424,7 @@ namespace PipePlot
             // Loop through every junction/connecting component to see if it connects to current component, if it does - run assignCoordinates
             foreach (BaseComponent component in Components)
             {
-                foreach (BaseConnection connection in component.Connections(OnlyValidConnections: true))
+                foreach (BaseConnection connection in component.Connections(OnlyCompleteConnections: true))
                 {
                     if (CurrentComponent.IndexOf(connection.TargetSegment) != -1)
                     {
@@ -514,7 +504,7 @@ namespace PipePlot
 
             foreach (BaseComponent component in Components)
             {
-                foreach (BaseConnection connection in component.Connections(OnlyValidConnections: true))
+                foreach (BaseConnection connection in component.Connections(OnlyCompleteConnections: true))
                 {
                     if (connection.CoordsWithinTolerance() == false)
                         s.WriteLine(string.Format("    line({0}, {1});  // Connection {2} of {3}", connection.SourceSegment.GetCoordinates(connection.SourceNode).Repr(), connection.TargetSegment.GetCoordinates(connection.TargetNode).Repr(), connection.SourceNode, connection.SourceSegment.UniqueId));
@@ -675,16 +665,23 @@ namespace PipeLineComponents
         /// Iterator method to access all connections in the component
         /// </summary>
         /// <returns></returns>
-        public IEnumerable<BaseConnection> Connections(bool OnlyValidConnections = false)
+        public IEnumerable<BaseConnection> Connections(bool OnlyCompleteConnections = false)
         {
             foreach (BaseSegment segment in Segments)
             {
                 foreach (BaseConnection connection in segment.Connections)
                 {
-                    if (OnlyValidConnections == false)
-                        yield return connection;
+                    if (OnlyCompleteConnections == false)
+                    {
+                        if (connection.IsValid == true)
+                            yield return connection; 
+                    }
                     else
-                        if (connection.TargetSegment != null) yield return connection;
+                    {
+                        if (connection.IsConnected == true)
+                            yield return connection;
+                    }
+                        
                 }
             }
         }
@@ -843,8 +840,15 @@ namespace PipeLineComponents
                 if (!Double.TryParse(inputWords[15], out tmpDbl)) tmpDbl = 0.0;
                 Parameter2 = tmpDbl;
 
-                Connections.Add(new BaseConnection(this, 1, inputWords[16], inputWords[17]));
-                Connections.Add(new BaseConnection(this, 2, inputWords[18], inputWords[19]));
+                string targetId1 = (inputWords[16] == "-") ? "" : inputWords[16];
+                int targetNode1;
+                if (!Int32.TryParse(inputWords[17], out targetNode1)) targetNode1 = -1;
+                Connections.Add(new BaseConnection(this, 1, targetId1, targetNode1));
+
+                string targetId2 = (inputWords[18] == "-") ? "" : inputWords[18];
+                int targetNode2;
+                if (!Int32.TryParse(inputWords[19], out targetNode2)) targetNode2 = -1;
+                Connections.Add(new BaseConnection(this, 2, targetId2, targetNode2));
             }
             else
             {
@@ -910,12 +914,24 @@ namespace PipeLineComponents
         /// <summary>The BaseSegment object of the source</summary>
         public BaseSegment SourceSegment { get; set; }
 
-        /// <value>Returns true if connection is made</value>
-        public bool ConnectionMade
+        /// <value>Returns true if TargetId is someting other than a empty string or "-"</value>
+        public bool IsValid
         {
             get
             {
-                if (TargetSegment == null && TargetId != "-")
+                if (TargetId == "-" || TargetId == "")
+                    return false;
+                else
+                    return true;
+            }
+        }
+
+        /// <value>Returns true if TargetSegment is set (connection found).</value>
+        public bool IsConnected
+        {
+            get
+            {
+                if (TargetSegment == null)
                     return false;
                 else
                     return true;
@@ -931,27 +947,18 @@ namespace PipeLineComponents
         /// <param name="TargetNode">The node where the connection attaches on the target segment</param>
         public BaseConnection(BaseSegment SourceSegment, int SourceNode, string TargetId, int TargetNode)
         {
-            this.TargetId = TargetId;
-            this.TargetNode = TargetNode;
-            this.SourceNode = SourceNode;
             this.SourceSegment = SourceSegment;
-        }
-
-        /// <summary>
-        /// Constructor for a connection object
-        /// </summary>
-        /// <param name="SourceSegment">The segment object of the source</param>
-        /// <param name="SourceNode">The node where the connection attaches on the source segment</param>
-        /// <param name="TargetId">The unique id of the target segment</param>
-        /// <param name="TargetNode">The node where the connection attaches on the target segment</param>
-        public BaseConnection(BaseSegment SourceSegment, int SourceNode, string TargetId, string TargetNode)
-        {
-            this.TargetId = TargetId;
-            int tmpInt;
-            if (!Int32.TryParse(TargetNode, out tmpInt)) tmpInt = -1;
-            this.TargetNode = tmpInt;
             this.SourceNode = SourceNode;
-            this.SourceSegment = SourceSegment;
+            this.TargetId = TargetId;
+            if (TargetId != "" && TargetNode == -1)
+            {
+                Logger.Warning("Incorrect node in Connection {0} '{1}', setting target node to 1", SourceNode, SourceSegment.UniqueId);
+                this.TargetNode = 1;
+            }
+            else
+            {
+                this.TargetNode = TargetNode;
+            }
         }
 
         /// <summary>
