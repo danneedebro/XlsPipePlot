@@ -286,7 +286,8 @@ namespace PipePlot
                 // Set default colors
                 if (component.Color == null)
                 {
-                    if (!defaultColors.TryGetValue(component.Type, out string defaultColor))
+                    string defaultColor;
+                    if (!defaultColors.TryGetValue(component.Type, out defaultColor))
                         defaultColor = "green";
                     component.Color = defaultColor;
                 }
@@ -303,7 +304,8 @@ namespace PipePlot
                 foreach (BaseSegment segment in component.Segments)
                 {
                     // Assign default template files for each segment
-                    if (!defaultTemplateFiles.TryGetValue(component.Type, out string fn))
+                    string fn;
+                    if (!defaultTemplateFiles.TryGetValue(component.Type, out fn))
                         fn = "Cylinder.scad";
 
                     // Update template with informaton from default template files
@@ -476,7 +478,8 @@ namespace PipePlot
             foreach (BaseComponent component in Components)
             {
                 // Write out a new flowpath the current index is present in the 'Flowpaths' dictionary.
-                if (Flowpaths.TryGetValue(Components.IndexOf(component), out string Caption))
+                string Caption;
+                if (Flowpaths.TryGetValue(Components.IndexOf(component), out Caption))
                 {
                     s.WriteLine("}");
                     s.WriteLine("");
@@ -944,10 +947,9 @@ namespace PipeLineComponents
         public BaseConnection(BaseSegment SourceSegment, int SourceNode, string TargetId, string TargetNode)
         {
             this.TargetId = TargetId;
-            if (!Int32.TryParse(TargetNode, out int i))
-                i = -1;
-
-            this.TargetNode = i;
+            int tmpInt;
+            if (!Int32.TryParse(TargetNode, out tmpInt)) tmpInt = -1;
+            this.TargetNode = tmpInt;
             this.SourceNode = SourceNode;
             this.SourceSegment = SourceSegment;
         }
@@ -1283,17 +1285,15 @@ namespace PipeLineComponents
         {
             string[] inputWords = InputString.Split(';');
             SegmentId = inputWords[1];
-            
-            if (!Int32.TryParse(inputWords[2], out int Node))
-                Node = -1;
-            if (!Double.TryParse(inputWords[3], out double X))
-                X = -1;
-            if (!Double.TryParse(inputWords[4], out double Y))
-                Y = -1;
-            if (!Double.TryParse(inputWords[5], out double Z))
-                Z = -1;
 
-            this.Node = Node;
+            int tmpInt;
+            if (!Int32.TryParse(inputWords[2], out tmpInt)) tmpInt = -1;
+            this.Node = tmpInt;
+
+            double X, Y, Z;
+            if (!Double.TryParse(inputWords[3], out X)) X = -1;
+            if (!Double.TryParse(inputWords[4], out Y)) Y = -1;
+            if (!Double.TryParse(inputWords[5], out Z)) Z = -1;
             this.Coords = new CoordsXYZ(X, Y, Z);
         }
     }
