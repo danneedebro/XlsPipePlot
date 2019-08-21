@@ -49,7 +49,7 @@ namespace PipePlot
             XlsPipePlotMain xlsPipePlot = new XlsPipePlotMain(fileNameInput);            
             xlsPipePlot.WriteToFile(fileNameOutput);
 
-            if (Logger.NumberOfWarnings > 0)
+            if (Logger.NumberOfWarnings > 0 || Logger.Level == 5)
             {
                 Console.WriteLine("Press any key to quit");
                 Console.Read();
@@ -248,7 +248,7 @@ namespace PipePlot
             }
             foreach (BaseComponent component in Components)
                 foreach (BaseConnection connection in component.Connections())
-                    Logger.Debug("Connection from node {0} of {1} connects to node {2} of {3}", connection.SourceNode, connection.SourceSegment.UniqueId, connection.TargetNode, connection.TargetSegment.UniqueId);
+                    Logger.Debug("Connection from node {0} of {1} connects to {3} at a distance {4} m from node {2}", connection.SourceNode, connection.SourceSegment.UniqueId, connection.TargetNode, connection.TargetSegment.UniqueId, connection.AxialTranslation);
         }
 
 
@@ -840,15 +840,31 @@ namespace PipeLineComponents
                 if (!Double.TryParse(inputWords[15], out tmpDbl)) tmpDbl = 0.0;
                 Parameter2 = tmpDbl;
 
-                string targetId1 = (inputWords[16] == "-") ? "" : inputWords[16];
-                int targetNode1;
-                if (!Int32.TryParse(inputWords[17], out targetNode1)) targetNode1 = -1;
-                Connections.Add(new BaseConnection(this, 1, targetId1, targetNode1));
+                // Read connections
+                for (int i = 0; i < 2; i++)
+                {
+                    string targetId = (inputWords[16 + i*2] == "-") ? "" : inputWords[16 + i*2];
+                    int targetNode;
+                    double axialTranslation = 0.0;
+                    if (inputWords[17 + i*2] == "A")
+                    {
+                        targetNode = 1;
+                    }
+                    else if (inputWords[17 + i*2] == "B")
+                    {
+                        targetNode = 2;
+                    }
+                    else
+                    {
+                        targetNode = 1;
+                        if (!Double.TryParse(inputWords[17 + i*2], out axialTranslation))
+                            axialTranslation = 0;
 
-                string targetId2 = (inputWords[18] == "-") ? "" : inputWords[18];
-                int targetNode2;
-                if (!Int32.TryParse(inputWords[19], out targetNode2)) targetNode2 = -1;
-                Connections.Add(new BaseConnection(this, 2, targetId2, targetNode2));
+                    }
+                    Connections.Add(new BaseConnection(this, i + 1, targetId, targetNode, axialTranslation));
+                }
+                
+                
             }
             else
             {
@@ -887,10 +903,19 @@ namespace PipeLineComponents
         /// Returns the CoordsXYZ of the segment (Coords1 or Coords2 depending on the node)
         /// </summary>
         /// <param name="Node">The node</param>
+        /// <param name="AxialTranslation">The node</param>
         /// <returns></returns>
-        public CoordsXYZ GetCoordinates(int Node)
+        public CoordsXYZ GetCoordinates(int Node, double AxialTranslation = 0.0)
         {
-            return (Node == 1) ? Coords1 : Coords2;
+            double deg2rad = Math.PI / 180;
+            //return (Node == 1) ? Coords1 : Coords2;
+            //CoordsXYZ CoordStart, CoordEnd;
+            var coordStart = (Node == 1) ? Coords1 : Coords2;
+            var coordOutput = new CoordsXYZ();
+            coordOutput.X = coordStart.X + AxialTranslation * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad);
+            coordOutput.Y = coordStart.Y - AxialTranslation * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad);
+            coordOutput.Z = coordStart.Z + AxialTranslation * Math.Sin(AngleVertical * deg2rad);
+            return coordOutput;
         }
     }
 
@@ -913,6 +938,9 @@ namespace PipeLineComponents
 
         /// <summary>The BaseSegment object of the source</summary>
         public BaseSegment SourceSegment { get; set; }
+
+        /// <summary>Axial distance from TargetNode where connection is placed on TargetSegment.</summary>
+        public double AxialTranslation { get; set; }
 
         /// <value>Returns true if TargetId is someting other than a empty string or "-"</value>
         public bool IsValid
@@ -945,11 +973,12 @@ namespace PipeLineComponents
         /// <param name="SourceNode">The node where the connection attaches on the source segment</param>
         /// <param name="TargetId">The unique id of the target segment</param>
         /// <param name="TargetNode">The node where the connection attaches on the target segment</param>
-        public BaseConnection(BaseSegment SourceSegment, int SourceNode, string TargetId, int TargetNode)
+        public BaseConnection(BaseSegment SourceSegment, int SourceNode, string TargetId, int TargetNode, double AxialTranslation = 0.0)
         {
             this.SourceSegment = SourceSegment;
             this.SourceNode = SourceNode;
             this.TargetId = TargetId;
+            this.AxialTranslation = AxialTranslation;
             if (TargetId != "" && TargetNode == -1)
             {
                 Logger.Warning("Incorrect node in Connection {0} '{1}', setting target node to 1", SourceNode, SourceSegment.UniqueId);
@@ -1319,7 +1348,7 @@ namespace Bloat
         /// <summary>
         /// The level of what is to print out to screen.
         /// </summary>
-        public static int Level = 3;
+        public static int Level = 5;
 
         public static int NumberOfWarnings = 0;
 
