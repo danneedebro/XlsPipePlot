@@ -354,13 +354,13 @@ namespace PipePlot
                 foreach (BaseComponent component in Components)
                 {
                     if (component.IndexOf(referenceVolume.SegmentId) != -1)   // TODO: If component already assigned coords produce an error message
-                        SetCoordinates(component, referenceVolume.SegmentId, referenceVolume.Node, referenceVolume.Coords);
+                        SetCoordinates(component, referenceVolume.SegmentId, referenceVolume.Node, 0.0, referenceVolume.Coords);
                 }
             }
             if (RefVols.Count == 0)
             {
                 Logger.Warning("No reference volume given. Setting Node 1 of {0} to (x,y,z)=(0,0,0)", Components[0].Segments[0].UniqueId);
-                SetCoordinates(Components[0], Components[0].Segments[0].UniqueId, 1, new CoordsXYZ(0, 0, 0));
+                SetCoordinates(Components[0], Components[0].Segments[0].UniqueId, 1, 0.0, new CoordsXYZ(0, 0, 0));
             }
 
             foreach (BaseComponent component in Components)
@@ -368,10 +368,11 @@ namespace PipePlot
                 if (component.CoordsIsSet == false)
                 {
                     Logger.Warning("No coordinates calculated for {0}. Setting node 1 of its first segment ({1}) as a reference volume with (x,y,z)=(0,0,0)", component.TypeNameId, component.Segments[0].UniqueId);
-                    SetCoordinates(component, component.Segments[0].UniqueId, 1, new CoordsXYZ(0, 0, 0));
+                    SetCoordinates(component, component.Segments[0].UniqueId, 1, 0.0, new CoordsXYZ(0, 0, 0));
                 }
             }
 
+            // Loop check
             foreach (BaseComponent component in Components)
             {
                 foreach (BaseConnection connection in component.Connections(OnlyCompleteConnections: true))
@@ -396,7 +397,7 @@ namespace PipePlot
         /// <param name="Node">The node (1 or 2, inlet or outlet) where the coordinates apply</param>
         /// <param name="CurrentComponent">The component object</param>
         /// <param name="SegmentId">The segment id</param>
-        public void SetCoordinates(BaseComponent CurrentComponent, string SegmentId, int Node, CoordsXYZ CoordsToSet)
+        public void SetCoordinates(BaseComponent CurrentComponent, string SegmentId, int Node, double AxialTranslation, CoordsXYZ CoordsToSet)
         {
             Logger.Debug("- Assigning coordinates for '{0}'", CurrentComponent.TypeNameId);
 
@@ -408,17 +409,18 @@ namespace PipePlot
             }
             else
             {
-                CurrentComponent.SetCoordinates(SegmentId, Node, new CoordsXYZ(CoordsToSet.X, CoordsToSet.Y, CoordsToSet.Z));
+                CurrentComponent.SetCoordinates(SegmentId, Node, AxialTranslation, new CoordsXYZ(CoordsToSet.X, CoordsToSet.Y, CoordsToSet.Z));
                 Logger.Debug("   - Coordinates of {0} set to Coords1={1} and Coords2={2}", CurrentComponent.Name, CurrentComponent.Coords1.Repr(), CurrentComponent.Coords2.Repr());
             }
                        
             // Loop through its connections to see what it connects to - assign Coordinates to these
             foreach (BaseConnection connection in CurrentComponent.Connections(OnlyCompleteConnections: true))
             {
-                var CoordsToSetToConnectingComponent = connection.SourceNode == 1 ? connection.SourceSegment.Coords1 : connection.SourceSegment.Coords2;
-                
+                //var CoordsToSetToConnectingComponent = connection.SourceNode == 1 ? connection.SourceSegment.Coords1 : connection.SourceSegment.Coords2;
+                var CoordsToSetToConnectingComponent = connection.SourceSegment.GetCoordinates(connection.SourceNode);
+
                 Logger.Debug("      - Connection {0} of '{1}': {2} is assigned coords={3}", -1, CurrentComponent.Name, connection.Repr(), CoordsToSetToConnectingComponent.Repr());
-                SetCoordinates(connection.TargetSegment.Parent, connection.TargetId, connection.TargetNode, CoordsToSetToConnectingComponent);
+                SetCoordinates(connection.TargetSegment.Parent, connection.TargetId, connection.TargetNode, connection.AxialTranslation, CoordsToSetToConnectingComponent);
             }
 
             // Loop through every junction/connecting component to see if it connects to current component, if it does - run assignCoordinates
@@ -428,8 +430,9 @@ namespace PipePlot
                 {
                     if (CurrentComponent.IndexOf(connection.TargetSegment) != -1)
                     {
-                        var CoordsToSetToConnectingJunction = connection.TargetNode == 1 ? connection.TargetSegment.Coords1 : connection.TargetSegment.Coords2;   // CurrentComponent.GetCoordinates(connection.TargetNode, connection.TargetId);
-                        SetCoordinates(component, connection.SourceSegment.UniqueId, connection.SourceNode, CoordsToSetToConnectingJunction);
+                        //var CoordsToSetToConnectingJunction = connection.TargetNode == 1 ? connection.TargetSegment.Coords1 : connection.TargetSegment.Coords2;   // CurrentComponent.GetCoordinates(connection.TargetNode, connection.TargetId);
+                        var CoordsToSetToConnectingJunction = connection.TargetSegment.GetCoordinates(connection.TargetNode, connection.AxialTranslation);
+                        SetCoordinates(component, connection.SourceSegment.UniqueId, connection.SourceNode, 0.0, CoordsToSetToConnectingJunction);
                     }
                 }
             }
@@ -595,7 +598,7 @@ namespace PipeLineComponents
         /// <param name="NewCoords">The coords of the reference location</param>
         /// <param name="Node">The node (1 or 2) of the reference segment</param>
         /// <param name="SegmentId">The unique id of the reference segment</param>
-        public void SetCoordinates(string SegmentId, int Node, CoordsXYZ NewCoords)
+        public void SetCoordinates(string SegmentId, int Node, double AxialTranslation, CoordsXYZ NewCoords)
         {
             int segmentIndex = IndexOf(SegmentId);
 
@@ -606,7 +609,7 @@ namespace PipeLineComponents
             }
 
             // Assign coordinates to segment with ID 'SegmentId'
-            Segments[segmentIndex].SetCoordinates(new CoordsXYZ(NewCoords.X, NewCoords.Y, NewCoords.Z), Node);
+            Segments[segmentIndex].SetCoordinates(new CoordsXYZ(NewCoords.X, NewCoords.Y, NewCoords.Z), Node, AxialTranslation);
 
             // Assign coordinates from segment after segment with ID 'SegmentId' to last segment
             for (int i = segmentIndex + 1; i < Segments.Count; i++)
@@ -873,23 +876,29 @@ namespace PipeLineComponents
         }
 
         /// <summary>
-        /// Sets the segment coordinates
+        /// Sets the segment coordinates for inlet and outlet (node 1 and 2 or A and B)
         /// </summary>
         /// <param name="NewCoords">The new coordinates to set to segment</param>
         /// <param name="Node">The location (node 1 or 2, inlet or outlet) where the coordinates apply</param>
-        public void SetCoordinates(CoordsXYZ NewCoords, int Node)
+        public void SetCoordinates(CoordsXYZ NewCoords, int Node, double AxialTranslation = 0.0)
         {
             double deg2rad = Math.PI / 180;
             switch (Node)
             {
                 case 1:
-                    Coords1.X = NewCoords.X; Coords1.Y = NewCoords.Y; Coords1.Z = NewCoords.Z;
+                    Coords1.X = NewCoords.X - AxialTranslation * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad);
+                    Coords1.Y = NewCoords.Y + AxialTranslation * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad);
+                    Coords1.Z = NewCoords.Z - AxialTranslation * Math.Sin(AngleVertical * deg2rad);
+
                     Coords2.X = Coords1.X + Length * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad) + Dx;
                     Coords2.Y = Coords1.Y - Length * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad) + Dy;
                     Coords2.Z = Coords1.Z + Length * Math.Sin(AngleVertical * deg2rad) + Dz;
                     break;
                 case 2:
-                    Coords2.X = NewCoords.X; Coords2.Y = NewCoords.Y; Coords2.Z = NewCoords.Z;
+                    Coords2.X = NewCoords.X + AxialTranslation * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad);
+                    Coords2.Y = NewCoords.Y - AxialTranslation * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad);
+                    Coords2.Z = NewCoords.Z + AxialTranslation * Math.Sin(AngleVertical * deg2rad);
+
                     Coords1.X = Coords2.X - Length * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad) - Dx;
                     Coords1.Y = Coords2.Y + Length * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad) - Dy;
                     Coords1.Z = Coords2.Z - Length * Math.Sin(AngleVertical * deg2rad) - Dz;
@@ -1012,7 +1021,7 @@ namespace PipeLineComponents
         /// <returns>A CoordsXYZ object.</returns>
         public CoordsXYZ GetCoordsMismatch()
         {
-            return SourceSegment.GetCoordinates(SourceNode) - TargetSegment.GetCoordinates(TargetNode);
+            return SourceSegment.GetCoordinates(SourceNode) - TargetSegment.GetCoordinates(TargetNode, AxialTranslation);
         }
 
         /// <summary>
