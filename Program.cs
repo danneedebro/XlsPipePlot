@@ -40,6 +40,14 @@ namespace PipePlot
                         i += 1;
                         break;
 
+                    case "-verbose":
+                        Logger.Level = 4;
+                        break;
+
+                    case "-debug":
+                        Logger.Level = 5;
+                        break;
+
                     default:
                         break;
                 }
@@ -195,6 +203,8 @@ namespace PipePlot
                 Console.WriteLine(e.Message);
                 Environment.Exit(1);
             }
+
+            Logger.WriteLine("Components: {0}", Components.Count);
         }
 
         /// <summary>
@@ -247,7 +257,7 @@ namespace PipePlot
                 }
             }
             foreach (BaseComponent component in Components)
-                foreach (BaseConnection connection in component.Connections())
+                foreach (BaseConnection connection in component.Connections(OnlyCompleteConnections: true))
                     Logger.Debug("Connection from node {0} of {1} connects to {3} at a distance {4} m from node {2}", connection.SourceNode, connection.SourceSegment.UniqueId, connection.TargetNode, connection.TargetSegment.UniqueId, connection.AxialTranslation);
         }
 
@@ -1357,7 +1367,7 @@ namespace Bloat
         /// <summary>
         /// The level of what is to print out to screen.
         /// </summary>
-        public static int Level = 5;
+        public static int Level = 3;
 
         public static int NumberOfWarnings = 0;
 
