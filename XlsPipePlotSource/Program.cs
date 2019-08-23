@@ -52,7 +52,7 @@ namespace PipePlot
                         break;
                 }
             }
-            
+            Logger.Level = 5;
 
             XlsPipePlotMain xlsPipePlot = new XlsPipePlotMain(fileNameInput);            
             xlsPipePlot.WriteToFile(fileNameOutput);
@@ -104,6 +104,8 @@ namespace PipePlot
             ReadFile(Filename);
             
             System.IO.Directory.CreateDirectory(PathLocal);  // Create Pathlocal (TODO: Don't create the folder if no scad file are to be created)
+
+            Console.Read();
 
             ConnectSystem();
 

@@ -1,0 +1,7 @@
+C:\Danne\Kodning\XlsPipePlot\XlsPipePlotSource\bin\Debug\XlsPipePlot.exe.config
+C:\Danne\Kodning\XlsPipePlot\XlsPipePlotSource\bin\Debug\XlsPipePlot.exe
+C:\Danne\Kodning\XlsPipePlot\XlsPipePlotSource\bin\Debug\XlsPipePlot.pdb
+C:\Danne\Kodning\XlsPipePlot\XlsPipePlotSource\obj\Debug\XlsPipePlot.csprojAssemblyReference.cache
+C:\Danne\Kodning\XlsPipePlot\XlsPipePlotSource\obj\Debug\XlsPipePlot.csproj.CoreCompileInputs.cache
+C:\Danne\Kodning\XlsPipePlot\XlsPipePlotSource\obj\Debug\XlsPipePlot.exe
+C:\Danne\Kodning\XlsPipePlot\XlsPipePlotSource\obj\Debug\XlsPipePlot.pdb
