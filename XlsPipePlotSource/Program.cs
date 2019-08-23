@@ -52,7 +52,6 @@ namespace PipePlot
                         break;
                 }
             }
-            Logger.Level = 5;
 
             XlsPipePlotMain xlsPipePlot = new XlsPipePlotMain(fileNameInput);            
             xlsPipePlot.WriteToFile(fileNameOutput);
