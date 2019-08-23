@@ -5,3 +5,6 @@ C:\Danne\Kodning\XlsPipePlot\XlsPipePlotSource\obj\Debug\XlsPipePlot.csprojAssem
 C:\Danne\Kodning\XlsPipePlot\XlsPipePlotSource\obj\Debug\XlsPipePlot.csproj.CoreCompileInputs.cache
 C:\Danne\Kodning\XlsPipePlot\XlsPipePlotSource\obj\Debug\XlsPipePlot.exe
 C:\Danne\Kodning\XlsPipePlot\XlsPipePlotSource\obj\Debug\XlsPipePlot.pdb
+C:\Danne\Kodning\XlsPipePlot\XlsPipePlotSource\bin\Debug\Newtonsoft.Json.dll
+C:\Danne\Kodning\XlsPipePlot\XlsPipePlotSource\bin\Debug\Newtonsoft.Json.xml
+C:\Danne\Kodning\XlsPipePlot\XlsPipePlotSource\obj\Debug\XlsPipePlot.csproj.CopyComplete

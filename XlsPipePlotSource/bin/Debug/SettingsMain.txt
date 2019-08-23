@@ -1,0 +1,26 @@
+{
+  "IncludeList": {},
+  "UseList": {
+    "Default1": "curvedPipe.scad"
+  },
+  "DefaultTemplateComponent": {
+    "Pipe": "PipeSegment.scad"
+  },
+  "DefaultTemplateSegment": {
+    "Tank": "TankDefault2.scad",
+    "Valve": "ValveDefault.scad",
+    "Reducer": "ReducerStraight.scad"
+  },
+  "DefaultColors": {
+    "Pipe": "colorPipe",
+    "Tank": "\"grey\"",
+    "Valve": "colorValve",
+    "Reducer": "\"red\"",
+    "Connection": "\"red\""
+  },
+  "Variables": {
+    "colorPipe": "grey",
+    "colorTank": "grey",
+    "colorValve": "red"
+  }
+}

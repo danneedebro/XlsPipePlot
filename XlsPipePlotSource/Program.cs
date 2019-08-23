@@ -4,10 +4,11 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO;
+using Newtonsoft.Json;
 using PipeLineComponents;
 using Bloat;
 
-namespace PipePlot
+namespace XlsPipePlot
 {
     /// <summary>
     /// Main program
@@ -22,9 +23,12 @@ namespace PipePlot
         {
             string fileNameInput = "C:\\Users\\Danne\\Dropbox\\Programmering\\PipePlot\\Code\\Version1\\PipePlot\\Apa.txt";
             string fileNameOutput = "Output.scad";
+            string fileNameSettings = AppDomain.CurrentDomain.BaseDirectory + "SettingsMain.txt";
 
             for (int i = 0; i < args.Length; i++)   
             {
+                
+
                 Console.WriteLine(string.Format("Processing argument {0} = \"{1}\"", i, args[i]));
                 switch (args[i])
                 {
@@ -53,7 +57,7 @@ namespace PipePlot
                 }
             }
 
-            XlsPipePlotMain xlsPipePlot = new XlsPipePlotMain(fileNameInput);            
+            XlsPipePlotMain xlsPipePlot = new XlsPipePlotMain(fileNameInput, fileNameSettings);            
             xlsPipePlot.WriteToFile(fileNameOutput);
 
             if (Logger.NumberOfWarnings > 0 || Logger.Level == 5)
@@ -70,6 +74,8 @@ namespace PipePlot
     /// </summary>
     public class XlsPipePlotMain
     {
+        private XlsPipePlotSettings Settings;
+
         /// <summary>The main components library located in a subfolder to the executable.</summary>
         private string PathMain = AppDomain.CurrentDomain.BaseDirectory + "Components\\";
 
@@ -97,14 +103,14 @@ namespace PipePlot
         ///    the local components directory.
         /// </summary>
         /// <param name="Filename"></param>
-        public XlsPipePlotMain(string Filename)
+        public XlsPipePlotMain(string Filename, string SettingsFile = "SettingsMain.txt")
         {
+            Settings = XlsPipePlotSettings.ReadFile(SettingsFile);
+
             PathLocal = Path.GetDirectoryName(Filename) + "\\Components\\";
             ReadFile(Filename);
             
             System.IO.Directory.CreateDirectory(PathLocal);  // Create Pathlocal (TODO: Don't create the folder if no scad file are to be created)
-
-            Console.Read();
 
             ConnectSystem();
 
@@ -272,11 +278,6 @@ namespace PipePlot
             Console.WriteLine("");
             Console.WriteLine("*** STEP 4: ASSIGNING DEFAULT AND USER SPECIFIED TEMPLATE FILES ***");
 
-            IDictionary<string, string> defaultTemplateFiles = new Dictionary<string, string>()
-                                            { {"Tank","TankDefault.scad"}, {"Valve", "ValveDefault.scad"}, {"Reducer","ReducerStraight.scad"}, {"Connection", "Cylinder.scad"} };
-            IDictionary<string, string> defaultColors = new Dictionary<string, string>()
-                                            { {"Pipe","grey"}, {"Tank","grey"}, {"Valve", "red"}, {"Reducer","red"}, {"Connection", "red"} };
-
             foreach (BaseComponent component in Components)
             {
                 // Instanciate both component and segment template without file
@@ -288,29 +289,46 @@ namespace PipePlot
                 if (component.Color == null)
                 {
                     string defaultColor;
-                    if (!defaultColors.TryGetValue(component.Type, out defaultColor))
+                    if (!Settings.DefaultColors.TryGetValue(component.Type, out defaultColor))
                         defaultColor = "green";
                     component.Color = defaultColor;
                 }
 
-                // If pipe, no custom .scad files are allowed
-                if (component.Type == "Pipe")
+                // For those component types that uses a default template file (Pipe) - update template with information
+                string fn;
+                if (Settings.DefaultTemplateComponent.TryGetValue(component.Type, out fn))
                 {
-                    component.Template.ReadTemplateFile(PathMain + "PipeSegment.scad");
-                    continue;
+                    if (File.Exists(PathLocal + fn))
+                        component.Template.ReadTemplateFile(PathLocal + fn);
+                    else if (File.Exists(PathMain + fn))
+                        component.Template.ReadTemplateFile(PathMain + fn);
+                    else
+                    {
+                        Logger.Warning("Default component template file '{0}' for type={1} doesn't exist in local or main component library. Adding default.", fn, component.Type);
+                        component.Template.AddComp(string.Format("// Error, component template file '{1}' was not found{0}myCustomFunction((NODES), (DO));", Environment.NewLine, fn));
+                        component.Template.WriteTemplateFile(PathLocal + fn);
+                    }
                 }
-
+                    
                 // Loop through each segment and depending on its type and other properties assign it a suitable .scad file
                 List<string> localFilenames = new List<string>();
                 foreach (BaseSegment segment in component.Segments)
                 {
                     // Assign default template files for each segment
-                    string fn;
-                    if (!defaultTemplateFiles.TryGetValue(component.Type, out fn))
+                    if (!Settings.DefaultTemplateSegment.TryGetValue(segment.Type, out fn))
                         fn = "Cylinder.scad";
 
                     // Update template with informaton from default template files
-                    segment.Template.ReadTemplateFile(PathMain + fn);
+                    if (File.Exists(PathLocal + fn))
+                        segment.Template.ReadTemplateFile(PathLocal + fn);
+                    else if (File.Exists(PathMain + fn))
+                        segment.Template.ReadTemplateFile(PathMain + fn);
+                    else
+                    {
+                        Logger.Warning("Default segment template file '{0}' for type={1} doesn't exist in local or main component library. Adding default.", fn, segment.Type);
+                        segment.Template.AddComp(string.Format("rotate([0,90,0]){0}translate([0, 0, (LENGTH)/2]){0}cylinder(h = (LENGTH), r = (DO)/2, center = true);", Environment.NewLine));
+                        segment.Template.WriteTemplateFile(PathLocal + fn);
+                    }
 
                     // Check if file exists first in local folder, then in main folder
                     if (segment.Filename != "")
@@ -530,6 +548,113 @@ namespace PipePlot
             f.Close();
             Console.WriteLine("File created successfully...");
         }       
+    }
+
+    /// <summary>
+    /// Class containing the settings for XlsPipePlot
+    /// </summary>
+    public class XlsPipePlotSettings
+    {
+        /// <summary>List of filenames (absolute path, relative path or only name) to .scad files that are to be included (acts as if the text in them were present in code) in model.</summary>
+        public IDictionary<string, string> IncludeList = new Dictionary<string, string>();
+
+        /// <summary>List of filenames (absolute path, relative path or only name) to .scad files that are to be used (methods and functions available) in model.</summary>
+        public IDictionary<string, string> UseList = new Dictionary<string, string>();
+
+        /// <summary>Default template for components.</summary>
+        public IDictionary<string, string> DefaultTemplateComponent = new Dictionary<string, string>();
+
+        /// <summary>Default template for segments.</summary>
+        public IDictionary<string, string> DefaultTemplateSegment = new Dictionary<string, string>();
+
+        /// <summary>Default color for components.</summary>
+        public IDictionary<string, string> DefaultColors = new Dictionary<string, string>();
+
+        /// <summary>Variables.</summary>
+        public IDictionary<string, string> Variables = new Dictionary<string, string>();
+
+        /// <summary>
+        /// Static method for creating a XlsPipePlotSettings object from a json file.
+        /// </summary>
+        /// <param name="Filename">The path to the json formatted file</param>
+        /// <returns>A XlsPipePlotSettings object</returns>
+        public static XlsPipePlotSettings ReadFile(string Filename)
+        {
+            XlsPipePlotSettings output = new XlsPipePlotSettings();
+
+            try
+            {   // Open the text file using a stream reader.
+                using (StreamReader sr = new StreamReader(Filename))
+                {
+                    // Read the stream to a string, and write the string to the console.
+                    String line = sr.ReadToEnd();
+                    output = JsonConvert.DeserializeObject<XlsPipePlotSettings>(line);
+                }
+
+            }
+            catch (IOException e)
+            {
+                Console.WriteLine("The file could not be read:");
+                Console.WriteLine(e.Message);
+            }
+            return output;
+        }
+
+        /// <summary>
+        /// Serializes the object to a json string.
+        /// </summary>
+        /// <returns>A json string.</returns>
+        public string ToJsonString()
+        {
+            return JsonConvert.SerializeObject(this, Formatting.Indented);
+        }
+
+        /// <summary>
+        /// Appends an XlsPipePlotSettings object into current one
+        /// </summary>
+        /// <param name="SettingsToAppend">The XlsPipePlotSettings object to append onto current.</param>
+        public void AppendSettings(XlsPipePlotSettings SettingsToAppend)
+        {
+            // IncludeList
+            foreach (KeyValuePair<string, string> kvp in SettingsToAppend.IncludeList)
+                IncludeList[kvp.Key] = kvp.Value;
+
+            // UseList
+            foreach (KeyValuePair<string, string> kvp in SettingsToAppend.UseList)
+                UseList[kvp.Key] = kvp.Value;
+
+            // DefaultTemplateComponent
+            foreach (KeyValuePair<string, string> kvp in SettingsToAppend.DefaultTemplateComponent)
+                DefaultTemplateComponent[kvp.Key] = kvp.Value;
+
+            // DefaultTemplateSegment
+            foreach (KeyValuePair<string, string> kvp in SettingsToAppend.DefaultTemplateSegment)
+                DefaultTemplateSegment[kvp.Key] = kvp.Value;
+
+            // DefaultTemplateColors
+            foreach (KeyValuePair<string, string> kvp in SettingsToAppend.DefaultColors)
+                DefaultColors[kvp.Key] = kvp.Value;
+
+            // DefaultTemplateColors
+            foreach (KeyValuePair<string, string> kvp in SettingsToAppend.Variables)
+                Variables[kvp.Key] = kvp.Value;
+
+        }
+
+        /// <summary>
+        /// Writes the object to a json text file. 
+        /// </summary>
+        /// <param name="Filename"></param>
+        public void WriteToFile(string Filename)
+        {
+            FileStream f = new FileStream(Filename, FileMode.Create);
+            StreamWriter s = new StreamWriter(f);
+
+            s.WriteLine(ToJsonString());
+
+            s.Close();
+            f.Close();
+        }
     }
 }
 
@@ -1083,6 +1208,11 @@ namespace PipeLineComponents
             }
         }
 
+        public void AddComp(string ManuallyAddedText)
+        {
+            _readText = ManuallyAddedText;
+        }
+
         /// <summary>
         /// Reads a file that is to be used as a template. Lines with "// REMOVE"-string will not be read.
         /// </summary>
@@ -1127,7 +1257,7 @@ namespace PipeLineComponents
 
             // If no segment is given - return output for whole component
             output.AppendFormat("// Type={1}, Name={2}, Id={3}{0}", Environment.NewLine, Component.Type, Component.Name, Component.Segments[0].UniqueId);
-            output.AppendFormat("color(\"{1}\"){0}", Environment.NewLine, Component.Color);
+            output.AppendFormat("color({1}){0}", Environment.NewLine, Component.Color);
             output.AppendFormat("translate({1}){0}", Environment.NewLine, Component.Coords1.Repr());
             output.AppendFormat("{{ {0}", Environment.NewLine);
 
@@ -1204,17 +1334,25 @@ namespace PipeLineComponents
                     ind += 1;
                 }
                 ind = 0;
-                foreach (BaseSegment segment in Component.Segments)
+                if (_readText == "")
                 {
-                    var segmentText = segment.Template.OutputSegment(OutputKeywords: true);
-                    foreach (KeyValuePair<string, string> kvp in segment.Template.KeywordsAndValues)
+                    foreach (BaseSegment segment in Component.Segments)
                     {
-                        segmentText = segmentText.Replace(string.Format("({0})", kvp.Key), string.Format("({0}_{1})", kvp.Key, ind));
-                    }
+                        var segmentText = segment.Template.OutputSegment(OutputKeywords: true);
+                        foreach (KeyValuePair<string, string> kvp in segment.Template.KeywordsAndValues)
+                        {
+                            segmentText = segmentText.Replace(string.Format("({0})", kvp.Key), string.Format("({0}_{1})", kvp.Key, ind));
+                        }
 
-                    s.WriteLine(segmentText);
-                    ind += 1;
+                        s.WriteLine(segmentText);
+                        ind += 1;
+                    }
                 }
+                else  // If it is a default component template file (eg. curvedPipe(...))
+                {
+                    s.WriteLine(_readText);
+                }
+                
             }
             else  // Creates a single-segment template file
             {
