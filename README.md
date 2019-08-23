@@ -8,3 +8,6 @@ A program that outputs a 3D CAD of a piping system from simple input in spreadsh
 3. Make a directory and place the XlsPipePlot.exe in this one.
 4. Copy the "Components" folder to the folder where XlsPipePlot.exe is located.
 5. Open the input sheet and start modelling. Make sure the path to the XlsPipePlot.exe is correct.
+
+
+# Example
