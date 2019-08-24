@@ -57,6 +57,12 @@ namespace XlsPipePlot
                 }
             }
 
+            if (!File.Exists(fileNameInput))
+            {
+                Logger.Warning("File '{0}' doesn't exist.", fileNameInput);
+                Environment.Exit(1);
+            }
+
             XlsPipePlotMain xlsPipePlot = new XlsPipePlotMain(fileNameInput, fileNameSettings);            
             xlsPipePlot.WriteToFile(fileNameOutput);
 

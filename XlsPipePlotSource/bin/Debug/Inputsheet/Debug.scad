@@ -1,4 +1,4 @@
-// Generated 2019-08-23 22:19:25
+// Generated 2019-08-24 08:36:52
 $fn=50;
 use <curvedPipe.scad>
 
