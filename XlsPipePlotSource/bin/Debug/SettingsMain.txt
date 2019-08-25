@@ -1,26 +1,64 @@
+// Main settings file for XlsPipePlot
+// 
+// IncludeList:
+//  This dict/object contains the filenames of .scad files to be included (executed
+//  as normal input).
+//
+// UseList
+//  Contains the filenames of the .scad files to be used (functions in them available
+//  but not executed)
+//
+// DefaultTemplateComponent: 
+//  This dict/object contains information about what default template file that should
+//  be used for component types such as pipes that uses the information from the whole
+//  component (one or many segments) to generate output.
+//
+// DefaultTemplateSegment:
+//  Default template files for segments of a particular type.
+//
+// DefaultColors: The default colors of each component.
+//
+// Variables: Contains the variable names (the key) and the value.
+//
+// PipeAutoReducer:
+//  Indicates what component types that are to be automatically split if a change in
+//  dimension occur (Do and wall th.). The key holds the segment type to insert in 
+//  between these pipes.
+//
 {
   "IncludeList": {},
   "UseList": {
     "Default1": "curvedPipe.scad"
   },
+  // These are
   "DefaultTemplateComponent": {
     "Pipe": "PipeSegment.scad"
   },
   "DefaultTemplateSegment": {
     "Tank": "TankDefault2.scad",
+    "Pipe": "Cylinder.scad",
+    "Connection": "TankDefault2.scad",
     "Valve": "ValveDefault.scad",
-    "Reducer": "ReducerStraight.scad"
+    "Reducer": "ReducerStraight.scad",
+    "ReducerAuto": "ReducerStraightAuto.scad",
+    "Penetration": "WallPenetration.scad"
   },
   "DefaultColors": {
     "Pipe": "colorPipe",
     "Tank": "\"grey\"",
     "Valve": "colorValve",
-    "Reducer": "\"red\"",
-    "Connection": "\"red\""
+    "Reducer": "colorReducer",
+    "ReducerAuto": "colorPipe",
+    "Connection": "\"red\"",
+    "Penetration": "\"grey\""
   },
   "Variables": {
-    "colorPipe": "grey",
-    "colorTank": "grey",
-    "colorValve": "red"
+    "colorPipe": "\"grey\"",
+    "colorTank": "\"grey\"",
+    "colorReducer": "\"red\"",
+    "colorValve": "\"red\""
+  },
+  "PipeAutoReducer": {
+    "Pipe": "ReducerAuto"
   }
 }

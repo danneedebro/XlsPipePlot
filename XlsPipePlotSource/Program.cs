@@ -21,8 +21,8 @@ namespace XlsPipePlot
         /// <param name="args"></param>
         static void Main(string[] args)
         {
-            string fileNameInput = "C:\\Users\\Danne\\Dropbox\\Programmering\\PipePlot\\Code\\Version1\\PipePlot\\Apa.txt";
-            string fileNameOutput = "Output.scad";
+            string fileNameInput = "";
+            string fileNameOutput = "";
             string fileNameSettings = AppDomain.CurrentDomain.BaseDirectory + "SettingsMain.txt";
 
             for (int i = 0; i < args.Length; i++)   
@@ -131,8 +131,7 @@ namespace XlsPipePlot
         /// <param name="Filename">The file to read</param>
         public void ReadFile(string Filename)
         {
-            Console.WriteLine("");
-            Console.WriteLine("*** STEP 1: READING FROM FILE ***");
+            Logger.WriteLine("{0}*** STEP 1: READING FROM FILE ***", Environment.NewLine);
             Logger.Debug("Reading file {0}", Filename);
 
             var previousSegment = new BaseSegment("");
@@ -153,6 +152,7 @@ namespace XlsPipePlot
                             case "Pipe":
                             case "Volume":
                             case "Component":
+                            case "Junction":
                                 currentSegment = new BaseSegment(line);
 
                                 if (currentSegment.Type != previousSegment.Type)
@@ -163,20 +163,16 @@ namespace XlsPipePlot
                                 else if(currentSegment.Type == previousSegment.Type)
                                 {
                                     // If Pipe and changing dimensions - add a reducer between
-                                    // TODO: Also include i a discrete coord change (dx, dy or dz) is given
-                                    if (currentSegment.Type == "Pipe" && (currentSegment.DiameterOuter != previousSegment.DiameterOuter || currentSegment.WallThickness != previousSegment.WallThickness) )
+                                    if (Settings.PipeAutoReducer.ContainsKey(currentSegment.Type) && (currentSegment.DiameterOuter != previousSegment.DiameterOuter || currentSegment.WallThickness != previousSegment.WallThickness) )
                                     {
                                         var newReducer = new BaseComponent(line);
-                                        newReducer.Segments[0].Type = "Reducer";
+                                        string pipeSplitType;
+                                        if (!Settings.PipeAutoReducer.TryGetValue(currentSegment.Type, out pipeSplitType))
+                                            pipeSplitType = "ReducerAuto";
+                                        newReducer.Segments[0].Type = pipeSplitType;
                                         newReducer.Segments[0].UniqueId = "-";
                                         newReducer.Segments[0].Length = 0.00;
-                                        newReducer.Segments[0].DiameterOuter = previousSegment.DiameterOuter;
-                                        newReducer.Segments[0].Parameter1 = currentSegment.DiameterOuter;
-                                        if (previousSegment.DiameterOuter <= currentSegment.DiameterOuter)
-                                            newReducer.Segments[0].Filename = "ReducerStraightExp.scad";
-                                        else
-                                            newReducer.Segments[0].Filename = "ReducerStraightRed.scad";
-                                        
+                                        newReducer.Segments[0].DiameterOuter = Math.Max(previousSegment.DiameterOuter, currentSegment.DiameterOuter);
                                         newReducer.Segments[0].Connections[0].TargetSegment = previousSegment;
                                         newReducer.Segments[0].Connections[1].TargetSegment = currentSegment;
                                         newReducer.Segments[0].Connections[0].TargetId = previousSegment.UniqueId;
@@ -226,8 +222,7 @@ namespace XlsPipePlot
         /// </summary>
         public void ConnectSystem()
         {
-            Console.WriteLine("");
-            Console.WriteLine("*** STEP 2: FINDING CONNECTIONS ***");
+            Logger.WriteLine("{0}*** STEP 2: FINDING CONNECTIONS ***", Environment.NewLine);
 
             string uniqueIdToLookFor;
             bool connectionFound;
@@ -237,38 +232,37 @@ namespace XlsPipePlot
             {
                 foreach (BaseConnection connection in component.Connections())
                 {
-                    // If current connection is not made (only ID as string present and not segment object), look for it in the
-                    //  other components
-                    if (connection.IsConnected == false)  
-                    {
-                        uniqueIdToLookFor = connection.TargetId;
-                        connectionFound = false;
-                        var numberOfSegmentsFound = 0;
-                        Logger.Debug("Looking for Id='{0}'", uniqueIdToLookFor);
+                    if (connection.IsConnected == true) continue;   // skip if connection is already established
 
-                        foreach (BaseComponent componentToLookIn in Components)
+                    // If current connection is not made, look for it in the other components
+                    uniqueIdToLookFor = connection.TargetId;
+                    connectionFound = false;
+                    var numberOfSegmentsFound = 0;
+                    Logger.Debug("Looking for Id='{0}'", uniqueIdToLookFor);
+
+                    foreach (BaseComponent componentToLookIn in Components)
+                    {
+                        foreach (BaseSegment segment in componentToLookIn.Segments)
                         {
-                            foreach (BaseSegment segment in componentToLookIn.Segments)
+                            if (segment.UniqueId == uniqueIdToLookFor)
                             {
-                                if (segment.UniqueId == uniqueIdToLookFor)
-                                {
-                                    numberOfSegmentsFound += 1;
-                                    connectionFound = true;
-                                    Logger.Debug("    Found connection");
-                                    if (numberOfSegmentsFound == 1)
-                                        connection.TargetSegment = segment;
-                                }
+                                numberOfSegmentsFound += 1;
+                                connectionFound = true;
+                                Logger.Debug("    Found connection");
+                                if (numberOfSegmentsFound == 1)
+                                    connection.TargetSegment = segment;
                             }
                         }
-
-                        if (connectionFound == false)
-                            Logger.Warning("Connection {2} in segment with Id={0} to segment with Id={1} not found", connection.SourceSegment.UniqueId, connection.TargetId, connection.SourceNode); 
-
-                        if (numberOfSegmentsFound > 1)
-                            Logger.Warning("Connection {2} in segment with Id={0} refers to a segment id ({1}) where multiple occurances was found", connection.SourceSegment.UniqueId, connection.TargetId, connection.SourceNode);
                     }
+
+                    if (connectionFound == false)
+                        Logger.Warning("Connection {2} in segment with Id={0} to segment with Id={1} not found", connection.SourceSegment.UniqueId, connection.TargetId, connection.SourceNode);
+
+                    if (numberOfSegmentsFound > 1)
+                        Logger.Warning("Connection {2} in segment with Id={0} refers to a segment id ({1}) where multiple occurances was found", connection.SourceSegment.UniqueId, connection.TargetId, connection.SourceNode);
                 }
             }
+            // Produce debug information with complete connections
             foreach (BaseComponent component in Components)
                 foreach (BaseConnection connection in component.Connections(OnlyCompleteConnections: true))
                     Logger.Debug("Connection from node {0} of {1} connects to {3} at a distance {4} m from node {2}", connection.SourceNode, connection.SourceSegment.UniqueId, connection.TargetNode, connection.TargetSegment.UniqueId, connection.AxialTranslation);
@@ -281,8 +275,7 @@ namespace XlsPipePlot
         /// </summary>
         public void AssignFiles()
         {
-            Console.WriteLine("");
-            Console.WriteLine("*** STEP 4: ASSIGNING DEFAULT AND USER SPECIFIED TEMPLATE FILES ***");
+            Logger.WriteLine("{0}*** STEP 4: ASSIGNING DEFAULT AND USER SPECIFIED TEMPLATE FILES ***", Environment.NewLine);
 
             foreach (BaseComponent component in Components)
             {
@@ -296,7 +289,7 @@ namespace XlsPipePlot
                 {
                     string defaultColor;
                     if (!Settings.DefaultColors.TryGetValue(component.Type, out defaultColor))
-                        defaultColor = "green";
+                        defaultColor = "\"green\"";
                     component.Color = defaultColor;
                 }
 
@@ -322,7 +315,11 @@ namespace XlsPipePlot
                 {
                     // Assign default template files for each segment
                     if (!Settings.DefaultTemplateSegment.TryGetValue(segment.Type, out fn))
+                    {
+                        Logger.Warning("No default segment template file specified for segments of type={0}. Add to settings file.", segment.Type);
                         fn = "Cylinder.scad";
+                    }
+                        
 
                     // Update template with informaton from default template files
                     if (File.Exists(PathLocal + fn))
@@ -382,8 +379,7 @@ namespace XlsPipePlot
 
         public void AssignCoordinates()
         {
-            Console.WriteLine("");
-            Console.WriteLine("*** STEP 3: ASSIGNING COORDS ***");
+            Logger.WriteLine("{0}*** STEP 3: ASSIGNING COORDS ***", Environment.NewLine);
             foreach (ReferenceVolume referenceVolume in RefVols)
             {
                 foreach (BaseComponent component in Components)
@@ -465,7 +461,6 @@ namespace XlsPipePlot
                 {
                     if (CurrentComponent.IndexOf(connection.TargetSegment) != -1)
                     {
-                        //var CoordsToSetToConnectingJunction = connection.TargetNode == 1 ? connection.TargetSegment.Coords1 : connection.TargetSegment.Coords2;   // CurrentComponent.GetCoordinates(connection.TargetNode, connection.TargetId);
                         var CoordsToSetToConnectingJunction = connection.TargetSegment.GetCoordinates(connection.TargetNode, connection.AxialTranslation);
                         SetCoordinates(component, connection.SourceSegment.UniqueId, connection.SourceNode, 0.0, CoordsToSetToConnectingJunction);
                     }
@@ -479,8 +474,7 @@ namespace XlsPipePlot
         /// <param name="Filename">The OpenSCAD output file</param>
         public void WriteToFile(string Filename)
         {
-            Console.WriteLine("");
-            Console.WriteLine("*** STEP 5: WRITING TO FILE ***");
+            Logger.WriteLine("{0}*** STEP 5: WRITING TO FILE ***", Environment.NewLine);
 
             Logger.Debug("Writing to file '{0}'", Filename);
 
@@ -489,19 +483,22 @@ namespace XlsPipePlot
 
             s.WriteLine("// Generated " + DateTime.Now.ToString());
             s.WriteLine("$fn=50;");
-            s.WriteLine("use <curvedPipe.scad>");
+            foreach (KeyValuePair<string, string> kvp in Settings.IncludeList)
+                s.WriteLine(string.Format("include <{0}>", kvp.Value));
+            
+            foreach (KeyValuePair<string, string> kvp in Settings.UseList)
+                s.WriteLine(string.Format("use <{0}>", kvp.Value));
+
             s.WriteLine("");
-            s.WriteLine("colorPipe = \"grey\";");
-            s.WriteLine("colorReducer = \"grey\";");
-            s.WriteLine("colorValve = \"red\";");
-            s.WriteLine("colorTank = \"grey\";");
+            foreach (KeyValuePair<string, string> kvp in Settings.Variables)
+            {
+                s.WriteLine(string.Format("{0} = {1};", kvp.Key, kvp.Value));
+            }
             s.WriteLine("");
             s.WriteLine("");
             s.WriteLine("// Default flowpath");
             s.WriteLine("scale([1000, 1000, 1000])");
             s.WriteLine("{");
-
-            
 
             foreach (BaseComponent component in Components)
             {
@@ -545,7 +542,7 @@ namespace XlsPipePlot
                 foreach (BaseConnection connection in component.Connections(OnlyCompleteConnections: true))
                 {
                     if (connection.CoordsWithinTolerance() == false)
-                        s.WriteLine(string.Format("    line({0}, {1});  // Connection {2} of {3}", connection.SourceSegment.GetCoordinates(connection.SourceNode).Repr(), connection.TargetSegment.GetCoordinates(connection.TargetNode).Repr(), connection.SourceNode, connection.SourceSegment.UniqueId));
+                        s.WriteLine(string.Format("    line({0}, {1});  // Connection {2} of {3}", connection.SourceSegment.GetCoordinates(connection.SourceNode).Repr(), connection.TargetSegment.GetCoordinates(connection.TargetNode, connection.AxialTranslation).Repr(), connection.SourceNode, connection.SourceSegment.UniqueId));
                 }
             }
 
@@ -578,6 +575,9 @@ namespace XlsPipePlot
 
         /// <summary>Variables.</summary>
         public IDictionary<string, string> Variables = new Dictionary<string, string>();
+
+        /// <summary>Specifies the automatic reducer component/segment type name for pipe-type components</summary>
+        public IDictionary<string, string> PipeAutoReducer = new Dictionary<string, string>();
 
         /// <summary>
         /// Static method for creating a XlsPipePlotSettings object from a json file.
@@ -953,7 +953,7 @@ namespace PipeLineComponents
                     if (!Double.TryParse(inputWords[index], out tmpDbl))
                         notNumericList.Add(index + 1);
                 }
-                if (notNumericList.Count > 0) Logger.Warning("{0}Input error: Word(s) {1} in {2} not numeric", Environment.NewLine, string.Join(", ", notNumericList), inputWords[1]);
+                if (notNumericList.Count > 0) Logger.Warning("{0}Input error: Word(s) {1} in {2} not numeric", Environment.NewLine, string.Join(", ", notNumericList), inputWords[3]);
 
                 Type = inputWords[1];
                 Name = inputWords[2];
@@ -1207,13 +1207,32 @@ namespace PipeLineComponents
                 KeywordsAndValues.Add("DO", this.Segment.DiameterOuter.ToString());
                 KeywordsAndValues.Add("WALLTHICKNESS", this.Segment.WallThickness.ToString());
                 KeywordsAndValues.Add("PARAM1", this.Segment.Parameter1.ToString());
+                KeywordsAndValues.Add("PARAM2", this.Segment.Parameter2.ToString());
                 KeywordsAndValues.Add("ANGLE_VERTICAL", this.Segment.AngleVertical.ToString());
                 KeywordsAndValues.Add("ANGLE_AZIMUTHAL", this.Segment.AngleAzimuthal.ToString());
                 KeywordsAndValues.Add("ANGLE_AXIS", this.Segment.AngleAxis.ToString());
                 KeywordsAndValues.Add("COORDS1_LOC", this.Segment.Coords1.Repr(Component.Coords1));
+
+                // Add keywords to access the TargetSegment properties. If connection is connected (TargetSegment != null), 
+                // replace this
+                for (int i = 0; i < Segment.Connections.Count; i++)
+                {
+                    if (this.Segment.Connections[i].IsConnected)
+                    {
+                        var keywordPrefix = string.Format("C{0}_", i + 1);
+                        KeywordsAndValues.Add(keywordPrefix + "DO", this.Segment.Connections[i].TargetSegment.DiameterOuter.ToString());
+                        KeywordsAndValues.Add(keywordPrefix + "ANGLE_VERTICAL", this.Segment.Connections[i].TargetSegment.AngleVertical.ToString());
+                        KeywordsAndValues.Add(keywordPrefix + "ANGLE_AZIMUTHAL", this.Segment.Connections[i].TargetSegment.AngleAzimuthal.ToString());
+                        KeywordsAndValues.Add(keywordPrefix + "ANGLE_AXIS", this.Segment.Connections[i].TargetSegment.AngleAxis.ToString());
+                    }
+                }
             }
         }
 
+        /// <summary>
+        /// Adds the component or segment template by
+        /// </summary>
+        /// <param name="ManuallyAddedText">The text that describes the component or segment template.</param>
         public void AddComp(string ManuallyAddedText)
         {
             _readText = ManuallyAddedText;
@@ -1403,11 +1422,15 @@ namespace PipeLineComponents
             // If pipe component
             var nodes = "[" + string.Join(",", Component.Segments.Select(BaseSegment => BaseSegment.Coords1.Repr(Component.Coords1)).ToList()) + "," + Component.Segments[Component.Segments.Count - 1].Coords2.Repr(Component.Coords1) + "]";
             var bendradius = "[" + string.Join(",", Component.Segments.Select(BaseSegment => BaseSegment.Parameter1 * BaseSegment.DiameterOuter).ToList()) + "]";
+            var param1Vect = "[" + string.Join(",", Component.Segments.Select(BaseSegment => BaseSegment.Parameter1).ToList()) + "]";
+            var param2Vect = "[" + string.Join(",", Component.Segments.Select(BaseSegment => BaseSegment.Parameter2).ToList()) + "]";
 
             strOut = strOut.Replace("(DO)", Component.Segments[0].DiameterOuter.ToString());
             strOut = strOut.Replace("(WALLTHICKNESS)", Component.Segments[0].WallThickness.ToString());
             strOut = strOut.Replace("(NODES)", nodes);
             strOut = strOut.Replace("(BENDRADIUS)", bendradius);
+            strOut = strOut.Replace("(VECTOR_PARAM1)", param1Vect);
+            strOut = strOut.Replace("(VECTOR_PARAM2)", param2Vect);
             strOut = strOut.Replace("(SEGMENTS)", string.Format("{0}", Component.Segments.Count));
 
             return strOut;
