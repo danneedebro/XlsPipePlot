@@ -1,6 +1,7 @@
 # XlsPipePlot
 A program that outputs a 3D CAD of a piping system from simple input in spreadsheet form (.xls = Excel file format).
 
+![Basic principle](Docs/Images/Principle.png)
 
 ## Installation
 1. Install OpenSCAD ([https://www.openscad.org/downloads.html](https://www.openscad.org/downloads.html)) or download .zip distribution.
