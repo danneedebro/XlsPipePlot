@@ -1,4 +1,4 @@
-// Generated 2019-08-26 22:00:39
+// Generated 2019-08-27 22:39:24
 $fn=50;
 use <curvedPipe.scad>
 
@@ -17,7 +17,7 @@ scale([1000, 1000, 1000])
 // From Tank 1 to Tank 2
 scale([1000, 1000, 1000])
 {
-    // Type=Tank, Name=T1, Id=TANK_25
+    // Type=Tank, Name=T1, Id=VOL_25
     color("grey")
     translate([0.0000,0.0000,50.0000])
     { 
@@ -51,7 +51,7 @@ scale([1000, 1000, 1000])
         } 
     } 
     
-    // Type=Connection, Name=Conn, Id=COMP_27
+    // Type=Connection, Name=Conn, Id=JUNC_27
     color("red")
     translate([0.0000,0.0000,48.5000])
     { 
@@ -92,7 +92,7 @@ scale([1000, 1000, 1000])
         curvedPipe([[0.0000,0.0000,0.0000],[0.0000,0.0000,-0.5000],[1.5000,0.0000,-0.5000],[1.5000,0.0000,-1.1000],[1.5000,1.0000,-1.1000]],4,[0.15,0.15,0.15,0.15],0.1,0.1-2*0.00305);
     } 
     
-    // Type=Valve, Name=V1, Id=COMP_34
+    // Type=Valve, Name=V1, Id=JUNC_34
     color(colorValve)
     translate([1.5000,1.0000,47.4000])
     { 
@@ -111,12 +111,12 @@ scale([1000, 1000, 1000])
     color(colorPipe)
     translate([1.5000,1.2000,47.4000])
     { 
-        curvedPipe([[0.0000,0.0000,0.0000],[0.0000,1.0000,0.0000],[0.0000,1.0000,-0.4000],[2.0000,1.0000,-0.4000],[2.0000,1.0000,-0.7000]],4,[0.15,0.15,0.15,0.15],0.1,0.1-2*0.00305);
+        curvedPipe([[0.0000,0.0000,0.0000],[0.0000,1.0000,0.0000],[0.0000,1.0000,-0.4000],[2.0000,1.0000,-0.4000]],3,[0.15,0.15,0.15],0.1,0.1-2*0.00305);
     } 
     
-    // Type=Connection, Name=Connection, Id=COMP_41
+    // Type=Connection, Name=Connection, Id=JUNC_40
     color("red")
-    translate([3.5000,2.2000,46.7000])
+    translate([3.5000,2.2000,47.0000])
     { 
         translate([0.0000,0.0000,0.0000])
         rotate([0,-1*0,-1*0])
@@ -148,9 +148,9 @@ scale([1000, 1000, 1000])
         } 
     } 
     
-    // Type=Tank, Name=T2, Id=VOL_43
+    // Type=Tank, Name=T2, Id=VOL_42
     color("grey")
-    translate([3.5000,2.2000,47.7000])
+    translate([3.5000,2.2000,48.0000])
     { 
         translate([0.0000,0.0000,0.0000])
         rotate([0,-1*-90,-1*0])
@@ -185,10 +185,10 @@ scale([1000, 1000, 1000])
 }
 
 
-// From Tank 1 to Tank 2
+// Valve bypass
 scale([1000, 1000, 1000])
 {
-    // Type=Connection, Name=Conn, Id=COMP_48
+    // Type=Connection, Name=Conn, Id=JUNC_47
     color("red")
     translate([1.5000,0.5000,47.4000])
     { 
@@ -222,14 +222,14 @@ scale([1000, 1000, 1000])
         } 
     } 
     
-    // Type=Pipe, Name=Pipe, Id=PIPE_50
+    // Type=Pipe, Name=Pipe, Id=PIPE_49
     color(colorPipe)
     translate([1.5000,0.5000,47.4000])
     { 
         curvedPipe([[0.0000,0.0000,0.0000],[-0.7000,0.0000,0.0000],[-0.7000,0.5000,0.0000]],2,[0.15,0.15],0.1,0.1-2*0.00305);
     } 
     
-    // Type=Valve, Name=V2, Id=COMP_53
+    // Type=Valve, Name=V2, Id=JUNC_52
     color(colorValve)
     translate([0.8000,1.0000,47.4000])
     { 
@@ -244,14 +244,14 @@ scale([1000, 1000, 1000])
         } 
     } 
     
-    // Type=Pipe, Name=Pipe, Id=PIPE_55
+    // Type=Pipe, Name=Pipe, Id=PIPE_54
     color(colorPipe)
     translate([0.8000,1.2000,47.4000])
     { 
         curvedPipe([[0.0000,0.0000,0.0000],[0.0000,0.5000,0.0000],[0.7000,0.5000,0.0000]],2,[0.15,0.15],0.1,0.1-2*0.00305);
     } 
     
-    // Type=Connection, Name=Conn, Id=COMP_58
+    // Type=Connection, Name=Conn, Id=JUNC_57
     color("red")
     translate([1.5000,1.7000,47.4000])
     { 
@@ -283,6 +283,13 @@ scale([1000, 1000, 1000])
                 }
             }
         } 
+    } 
+    
+    // Type=Pipe, Name=Pipe, Id=PIPE_61
+    color(colorPipe)
+    translate([0.0000,0.0000,0.0000])
+    { 
+        curvedPipe([[0.0000,0.0000,0.0000],[0.0000,0.0000,0.0000]],1,[0],0,0-2*0);
     } 
     
 }
