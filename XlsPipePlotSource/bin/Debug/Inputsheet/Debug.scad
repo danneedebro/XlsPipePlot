@@ -1,4 +1,4 @@
-// Generated 2019-08-29 21:28:18
+// Generated 2019-08-29 23:20:20
 $fn=50;
 use <curvedPipe.scad>
 
@@ -287,7 +287,7 @@ scale([1000, 1000, 1000])
     
     // Type=Connection, Name=Conn, Id=JUNC_62
     color("red")
-    translate([0.7500,0.0000,105.2400])
+    translate([0.5303,0.5303,105.2400])
     { 
         translate([0.0000,0.0000,0.0000])
         rotate([0,-1*0,-1*0])
@@ -321,7 +321,7 @@ scale([1000, 1000, 1000])
     
     // Type=Pipe, Name=Pipe, Id=PIPE_64
     color(colorPipe)
-    translate([0.7500,0.0000,105.2400])
+    translate([0.5303,0.5303,105.2400])
     { 
         curvedPipe([[0.0000,0.0000,0.0000],[0.0000,2.0000,0.0000]],1,[0.075],0.05,0.05-2*0.00305);
     } 
