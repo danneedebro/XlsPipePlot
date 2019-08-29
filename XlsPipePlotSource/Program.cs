@@ -27,7 +27,6 @@ namespace XlsPipePlot
 
             for (int i = 0; i < args.Length; i++)   
             {
-                
 
                 Console.WriteLine(string.Format("Processing argument {0} = \"{1}\"", i, args[i]));
                 switch (args[i])
