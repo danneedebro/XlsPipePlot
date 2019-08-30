@@ -27,7 +27,6 @@ namespace XlsPipePlot
 
             for (int i = 0; i < args.Length; i++)   
             {
-                
 
                 Console.WriteLine(string.Format("Processing argument {0} = \"{1}\"", i, args[i]));
                 switch (args[i])
@@ -454,7 +453,7 @@ namespace XlsPipePlot
                 SetCoordinates(connection.TargetSegment.Parent, connection.TargetId, connection.TargetNode, connection.AxialTranslation, CoordsToSetToConnectingComponent);
             }
 
-            // Loop through every junction/connecting component to see if it connects to current component, if it does - run assignCoordinates
+            // Loop through every junction/connecting component to see if it connects to current component, if it does - run SetCoordinates
             foreach (BaseComponent component in Components)
             {
                 foreach (BaseConnection connection in component.Connections(OnlyCompleteConnections: true))
@@ -923,6 +922,16 @@ namespace PipeLineComponents
         /// <summary>The absolute coordinates (xyz) of node 2 (outlet) of the segment</summary>
         public CoordsXYZ Coords2 { get; set; }
 
+        /// <summary>A unit vector along the direction of the segment</summary>
+        public CoordsXYZ Direction
+        {
+            get
+            {
+                var L = (Dx == 0 && Dy == 0 && Dz == 0) ? 1.0 : Length;
+                return new CoordsXYZ(L, AngleVertical, AngleAzimuthal, Dx, Dy, Dz).UnitVector;
+            }
+        }
+
         /// <summary>A list with the connections of the segment</summary>
         public List<BaseConnection> Connections { get; set; }
 
@@ -1025,47 +1034,35 @@ namespace PipeLineComponents
         public void SetCoordinates(CoordsXYZ NewCoords, int Node, double AxialTranslation = 0.0)
         {
             double deg2rad = Math.PI / 180;
-            switch (Node)
-            {
-                case 1:
-                    Coords1.X = NewCoords.X - AxialTranslation * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad);
-                    Coords1.Y = NewCoords.Y + AxialTranslation * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad);
-                    Coords1.Z = NewCoords.Z - AxialTranslation * Math.Sin(AngleVertical * deg2rad);
 
-                    Coords2.X = Coords1.X + Length * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad) + Dx;
-                    Coords2.Y = Coords1.Y - Length * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad) + Dy;
-                    Coords2.Z = Coords1.Z + Length * Math.Sin(AngleVertical * deg2rad) + Dz;
-                    break;
-                case 2:
-                    Coords2.X = NewCoords.X + AxialTranslation * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad);
-                    Coords2.Y = NewCoords.Y - AxialTranslation * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad);
-                    Coords2.Z = NewCoords.Z + AxialTranslation * Math.Sin(AngleVertical * deg2rad);
+            // Calculate the local coordinates of the segment
+            var coords1Local = new CoordsXYZ(X0: 0, Y0: 0, Z0: 0);
+            var coords2Local = new CoordsXYZ(Length, AngleVertical, AngleAzimuthal, Dx, Dy, Dz);
 
-                    Coords1.X = Coords2.X - Length * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad) - Dx;
-                    Coords1.Y = Coords2.Y + Length * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad) - Dy;
-                    Coords1.Z = Coords2.Z - Length * Math.Sin(AngleVertical * deg2rad) - Dz;
-                    break;
-                default:
-                    break;
-            }
+            // Calculate the local coordinates of the reference location (the distance of the AxialTranslation
+            // in the direction of the unit vector in the same direction as the segment)
+            CoordsXYZ coordsRefLocLocal;
+            if (Node == 1)
+                coordsRefLocLocal = coords1Local + AxialTranslation * Direction;
+            else
+                coordsRefLocLocal = coords2Local + AxialTranslation * Direction;
+
+            // Calculate the translation and apply this on Coord1 and Coord2
+            var translationVector = NewCoords - coordsRefLocLocal;
+            Coords1 = coords1Local + translationVector;
+            Coords2 = coords2Local + translationVector;
         }
 
         /// <summary>
-        /// Returns the CoordsXYZ of the segment (Coords1 or Coords2 depending on the node)
+        /// Returns the CoordsXYZ of the segment at a distance of 'AxialTranslation' from node 1 or node 2
         /// </summary>
         /// <param name="Node">The node</param>
-        /// <param name="AxialTranslation">The node</param>
+        /// <param name="AxialTranslation">The distance from Node 1 or 2 in the direction of the segment.</param>
         /// <returns></returns>
         public CoordsXYZ GetCoordinates(int Node, double AxialTranslation = 0.0)
         {
-            double deg2rad = Math.PI / 180;
-            //return (Node == 1) ? Coords1 : Coords2;
-            //CoordsXYZ CoordStart, CoordEnd;
             var coordStart = (Node == 1) ? Coords1 : Coords2;
-            var coordOutput = new CoordsXYZ();
-            coordOutput.X = coordStart.X + AxialTranslation * Math.Cos(AngleVertical * deg2rad) * Math.Cos(AngleAzimuthal * deg2rad);
-            coordOutput.Y = coordStart.Y - AxialTranslation * Math.Cos(AngleVertical * deg2rad) * Math.Sin(AngleAzimuthal * deg2rad);
-            coordOutput.Z = coordStart.Z + AxialTranslation * Math.Sin(AngleVertical * deg2rad);
+            var coordOutput = coordStart + AxialTranslation*Direction;
             return coordOutput;
         }
     }
@@ -1449,6 +1446,19 @@ namespace PipeLineComponents
         /// <summary>The z-coordinate</summary>
         public double Z { get; set; }
 
+        /// <summary>Returns the unit vector of the object</summary>
+        public CoordsXYZ UnitVector
+        {
+            get
+            {
+                double vectorLength = Math.Sqrt(Math.Pow(X, 2) + Math.Pow(Y, 2) + Math.Pow(Z, 2));
+                if (vectorLength == 0)
+                    return new CoordsXYZ(0, 0, 0);
+                else
+                    return new CoordsXYZ(X / vectorLength, Y / vectorLength, Z / vectorLength);
+            }
+        }
+
         /// <summary>
         /// Default constructor
         /// </summary>
@@ -1465,9 +1475,27 @@ namespace PipeLineComponents
             X = X0; Y = Y0; Z = Z0;
         }
 
+        public CoordsXYZ(double L1, double VerticalAngle, double AzimuthalAngle, double dX0, double dY0, double dZ0)
+        {
+            double deg2rad = Math.PI / 180;
+            X = 0 + L1 * Math.Cos(VerticalAngle * deg2rad) * Math.Cos(AzimuthalAngle * deg2rad) + dX0;
+            Y = 0 - L1 * Math.Cos(VerticalAngle * deg2rad) * Math.Sin(AzimuthalAngle * deg2rad) + dY0;
+            Z = 0 + L1 * Math.Sin(VerticalAngle * deg2rad) + dZ0;
+        }
+
         public static CoordsXYZ operator -(CoordsXYZ Object1, CoordsXYZ Object2)
         {
             return new CoordsXYZ(Object1.X - Object2.X, Object1.Y - Object2.Y, Object1.Z - Object2.Z);
+        }
+
+        public static CoordsXYZ operator +(CoordsXYZ Object1, CoordsXYZ Object2)
+        {
+            return new CoordsXYZ(Object1.X + Object2.X, Object1.Y + Object2.Y, Object1.Z + Object2.Z);
+        }
+
+        public static CoordsXYZ operator *(double Coeff, CoordsXYZ Object1)
+        {
+            return new CoordsXYZ(Coeff*Object1.X, Coeff*Object1.Y, Coeff*Object1.Z);
         }
 
         /// <summary>
