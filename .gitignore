@@ -1,8 +1,2 @@
 XlsPipePlotSource/.vs
-/XlsPipePlotSource/bin/Debug
-!XlsPipePlotSource/bin/Debug/Inputsheet/
-!XlsPipePlotSource/bin/Debug/Components/
-!XlsPipePlotSource/bin/Debug/Components/
-!XlsPipePlotSource/bin/Debug/XlsPipePlot.exe
-!XlsPipePlotSource/bin/Debug/SettingsMain.txt
 /XlsPipePlotSource/bin/obj/*
