@@ -10,7 +10,7 @@ Local components folder:;;;\loclib;;;;;;;;;;;;;;;;;;
 Model settings:;;;;;;;;;;;;;;;;;;;;;
 Reference volumes (one for each system);;;;;;;;;;;;;;;;;;;;;
 Word;Unique-ID;Node;X0 (m);Y0 (m);Z0 (m);;;;;;;;;;;;;;;;
-Refvol;PIPE_28;0.9;0;0;107.24;;;;;;;;;;;;;;;;
+Refvol;PIPE_27;A;0;0;107.24;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;
