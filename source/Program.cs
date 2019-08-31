@@ -102,8 +102,8 @@ namespace XlsPipePlot
         /// <summary>A list containing the a list of loop checks that are to be performed</summary>
         public List<ReferenceVolume> LoopcheckPoints = new List<ReferenceVolume>();
 
-        /// <summary>A dictionary containing the flowpath captions. The key represent before what component index they are placed.</summary>
-        public IDictionary<int, string> Flowpaths = new Dictionary<int, string>();
+        /// <summary>A dictionary containing the sections captions. The key represent before what component index they are placed.</summary>
+        public IDictionary<int, string> Sections = new Dictionary<int, string>();
 
         /// <summary>
         /// Main constructor for XlsPipePlotMain class. It is instanciated with a input file that is processed in the following way
@@ -201,8 +201,8 @@ namespace XlsPipePlot
                                 LoopcheckPoints.Add(new ReferenceVolume(line));
                                 break;
 
-                            case "Flowpath":
-                                Flowpaths.Add(Components.Count, inputs[1]);
+                            case "Section":
+                                Sections.Add(Components.Count, inputs[1]);
                                 break;
 
                             default:
@@ -391,13 +391,11 @@ namespace XlsPipePlot
         {
             Logger.WriteLine("{0}*** STEP 3: ASSIGNING COORDS ***", Environment.NewLine);
             foreach (ReferenceVolume refVol in ReferenceVolumes)
-            {
                 foreach (BaseComponent component in Components)
                 {
                     if (component.IndexOf(refVol.SegmentId) != -1)   // TODO: If component already assigned coords produce an error message
                         SetCoordinates(component, refVol.SegmentId, refVol.Node, refVol.AxialTranslation, refVol.Coords);
                 }
-            }
 
             if (ReferenceVolumes.Count == 0)
             {
@@ -407,25 +405,19 @@ namespace XlsPipePlot
 
             // Check if all components are assigned coordinates. If not, set coordinates for this one and
             foreach (BaseComponent component in Components)
-            {
                 if (component.CoordsIsSet == false)
                 {
                     Logger.Warning("No coordinates calculated for {0}. Setting node 1 of its first segment ({1}) as a reference volume with (x,y,z)=(0,0,0)", component.TypeNameId, component.Segments[0].UniqueId);
                     SetCoordinates(component, component.Segments[0].UniqueId, 1, 0.0, new CoordsXYZ(0, 0, 0));
                 }
-            }
 
             // Loop check
             foreach (BaseComponent component in Components)
-            {
                 foreach (BaseConnection connection in component.Connections(OnlyCompleteConnections: true))
-                {
                     if (connection.CoordsWithinTolerance() == false)
                     {
                         Logger.Warning("Loop check for connection {0} of segment '{1}' failed. [dx,dy,dx] = {2} m", connection.SourceNode, connection.SourceSegment.UniqueId, connection.GetCoordsMismatch().Repr());
                     }
-                }
-            }
 
             // Loop check for manually specified points
             foreach (ReferenceVolume loopCheck in LoopcheckPoints)
@@ -434,8 +426,15 @@ namespace XlsPipePlot
                 if (TryGetSegment(loopCheck.SegmentId, out segment))
                 {
                     var difference = segment.GetCoordinates(loopCheck.Node, loopCheck.AxialTranslation) - loopCheck.Coords;
-                    if (Math.Abs(difference.Z) > 0.5)
-                        Logger.Warning("Loopcheck {0}: Z difference {1}.", LoopcheckPoints.IndexOf(loopCheck), difference.Z);
+                    Logger.Write("Loopcheck {0}, Id='{1}', Node={2} {3:+ 0.000;- 0.000;+ 0.000} m :", LoopcheckPoints.IndexOf(loopCheck), 
+                        loopCheck.SegmentId, loopCheck.Node, loopCheck.AxialTranslation);
+                    if (loopCheck.CheckX == true)
+                        Logger.Write("dX = {1:F3} m, ", LoopcheckPoints.IndexOf(loopCheck), difference.X);
+                    if (loopCheck.CheckY == true)
+                        Logger.Write("dY = {1:F3} m, ", LoopcheckPoints.IndexOf(loopCheck), difference.Y);
+                    if (loopCheck.CheckZ == true)
+                        Logger.Write("dZ = {1:F3} m, ", LoopcheckPoints.IndexOf(loopCheck), difference.Z);
+                    Logger.WriteLine("");
                 }
                 else
                 {
@@ -485,16 +484,12 @@ namespace XlsPipePlot
 
             // Loop through every junction/connecting component to see if it connects to current component, if it does - run SetCoordinates
             foreach (BaseComponent component in Components)
-            {
                 foreach (BaseConnection connection in component.Connections(OnlyCompleteConnections: true))
-                {
                     if (CurrentComponent.IndexOf(connection.TargetSegment) != -1)
                     {
                         var CoordsToSetToConnectingJunction = connection.TargetSegment.GetCoordinates(connection.TargetNode, connection.AxialTranslation);
                         SetCoordinates(component, connection.SourceSegment.UniqueId, connection.SourceNode, 0.0, CoordsToSetToConnectingJunction);
                     }
-                }
-            }
          }
 
         /// <summary>
@@ -520,20 +515,19 @@ namespace XlsPipePlot
 
             s.WriteLine("");
             foreach (KeyValuePair<string, string> kvp in Settings.Variables)
-            {
                 s.WriteLine(string.Format("{0} = {1};", kvp.Key, kvp.Value));
-            }
+
             s.WriteLine("");
             s.WriteLine("");
-            s.WriteLine("// Default flowpath");
+            s.WriteLine("// Section");
             s.WriteLine("scale([1000, 1000, 1000])");
             s.WriteLine("{");
 
             foreach (BaseComponent component in Components)
             {
-                // Write out a new flowpath the current index is present in the 'Flowpaths' dictionary.
+                // Write out a new section the current index is present in the 'Sections' dictionary.
                 string Caption;
-                if (Flowpaths.TryGetValue(Components.IndexOf(component), out Caption))
+                if (Sections.TryGetValue(Components.IndexOf(component), out Caption))
                 {
                     s.WriteLine("}");
                     s.WriteLine("");
@@ -567,13 +561,11 @@ namespace XlsPipePlot
             s.WriteLine("{");
 
             foreach (BaseComponent component in Components)
-            {
                 foreach (BaseConnection connection in component.Connections(OnlyCompleteConnections: true))
                 {
                     if (connection.CoordsWithinTolerance() == false)
                         s.WriteLine(string.Format("    line({0}, {1});  // Connection {2} of {3}", connection.SourceSegment.GetCoordinates(connection.SourceNode).Repr(), connection.TargetSegment.GetCoordinates(connection.TargetNode, connection.AxialTranslation).Repr(), connection.SourceNode, connection.SourceSegment.UniqueId));
                 }
-            }
 
             s.WriteLine("}");
             s.Close();
