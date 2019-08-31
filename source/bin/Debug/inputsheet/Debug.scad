@@ -1,4 +1,4 @@
-// Generated 2019-08-30 23:54:34
+// Generated 2019-08-31 10:33:24
 $fn=50;
 use <curvedPipe.scad>
 
@@ -212,16 +212,16 @@ scale([1000, 1000, 1000])
         curvedPipe([[0.0000,0.0000,0.0000],[0.1237,-0.1237,0.0000],[0.5987,-0.1237,0.0000],[0.5987,-0.5717,0.0000],[0.5987,-0.5717,0.1140]],4,[0.113792,0.113792,0.113792,0.113792],0.0889,0.0889-2*0.00549);
     } 
     
-    // Type=ReducerAuto, Name=Pipe, Id=-
+    // Type=ReducerAuto, Name=, Id=-
     color(colorPipe)
     translate([-1.5753,-0.3027,98.3880])
     { 
         translate([0.0000,0.0000,0.0000])
-        rotate([0,-1*90,-1*0])
+        rotate([0,-1*0,-1*0])
         { 
             rotate([0,90,0])
             translate([0, 0, 0/2])
-            cylinder(h = 0, r = 0.0889/2, center = true);
+            cylinder(h = 0, r = 0/2, center = true);
         } 
     } 
     
@@ -232,16 +232,16 @@ scale([1000, 1000, 1000])
         curvedPipe([[0.0000,0.0000,0.0000],[0.0000,0.0000,0.1430]],1,[0.0772096],0.06032,0.06032-2*0.00391);
     } 
     
-    // Type=ReducerAuto, Name=Pipe, Id=-
+    // Type=ReducerAuto, Name=, Id=-
     color(colorPipe)
     translate([-1.5753,-0.3027,98.5310])
     { 
         translate([0.0000,0.0000,0.0000])
-        rotate([0,-1*90,-1*0])
+        rotate([0,-1*0,-1*0])
         { 
             rotate([0,90,0])
             translate([0, 0, 0/2])
-            cylinder(h = 0, r = 0.06032/2, center = true);
+            cylinder(h = 0, r = 0/2, center = true);
         } 
     } 
     

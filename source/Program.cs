@@ -27,7 +27,7 @@ namespace XlsPipePlot
 
             for (int i = 0; i < args.Length; i++)   
             {
-                Logger.Level = 3;
+                Logger.Level = 5;
                 Logger.Debug("Processing argument {0} = \"{1}\"", i, args[i]);
                 switch (args[i])
                 {
@@ -173,20 +173,12 @@ namespace XlsPipePlot
                                     // If Pipe and changing dimensions - add a reducer between
                                     if (Settings.PipeAutoReducer.ContainsKey(currentSegment.Type) && (currentSegment.DiameterOuter != previousSegment.DiameterOuter || currentSegment.WallThickness != previousSegment.WallThickness) )
                                     {
-                                        var newReducer = new BaseComponent(line);
                                         string pipeSplitType;
                                         if (!Settings.PipeAutoReducer.TryGetValue(currentSegment.Type, out pipeSplitType))
                                             pipeSplitType = "ReducerAuto";
-                                        newReducer.Segments[0].Type = pipeSplitType;
-                                        newReducer.Segments[0].UniqueId = "-";
-                                        newReducer.Segments[0].Length = 0.00;
-                                        newReducer.Segments[0].DiameterOuter = Math.Max(previousSegment.DiameterOuter, currentSegment.DiameterOuter);
-                                        newReducer.Segments[0].Connections[0].TargetSegment = previousSegment;
-                                        newReducer.Segments[0].Connections[1].TargetSegment = currentSegment;
-                                        newReducer.Segments[0].Connections[0].TargetId = previousSegment.UniqueId;
-                                        newReducer.Segments[0].Connections[1].TargetId = currentSegment.UniqueId;
-                                        newReducer.Segments[0].Connections[0].TargetNode = 2;
-                                        newReducer.Segments[0].Connections[1].TargetNode = 1;
+                                        var reducerInputString = BaseSegment.GetInputString(Type: pipeSplitType, UniqueId: "-", FromId: previousSegment.UniqueId, FromNode: "B", ToId: currentSegment.UniqueId,
+                                            ToNode: "A");
+                                        var newReducer = new BaseComponent(reducerInputString);
                                         Components.Add(newReducer);
 
                                         Components.Add(new BaseComponent(currentSegment));
@@ -893,26 +885,26 @@ namespace XlsPipePlotBuildingBlocks
         /// </summary>
         public BaseTemplate Template { get; set; }
 
-        /// <summary>The length of the segment in meters that is inputted by the user</summary>
-        public double Length { get; set; }
+        /// <summary>The length of the segment in meters</summary>
+        public double Length { get { return Coords2Local.Length; } }
 
         /// <summary>The vertical angle of the segment. Between -90 and +90 degrees.</summary>
-        public double AngleVertical { get; set; }
+        public double AngleVertical { get { return Direction.AngleVertical; } }
 
         /// <summary>The azimuthal angle of the segment. Between 0 and 360 degrees clockwise around z-axis. 0 degrees is towards the +x-axis, 90 degrees is towards -y-axis and so on.</summary>
-        public double AngleAzimuthal { get; set; }
+        public double AngleAzimuthal { get { return Direction.AngleAzimuthal; } }
 
         /// <summary>The angle around the segment axis/center. Used for instance to align the valve bonnet. Between 0 and 360 degrees.</summary>
         public double AngleAxis { get; set; }
 
         /// <summary>Discrete x-coordinate change over the segment (in addition to that given by the length and the angles)</summary>
-        public double Dx { get; set; }
+        public double Dx { get { return Coords2Local.X; } }
 
         /// <summary>Discrete y-coordinate change over the segment (in addition to that given by the length and the angles)</summary>
-        public double Dy { get; set; }
+        public double Dy { get { return Coords2Local.Y; } }
 
         /// <summary>Discrete z-coordinate change over the segment (in addition to that given by the length and the angles)</summary>
-        public double Dz { get; set; }
+        public double Dz { get { return Coords2Local.Z; } }
 
         /// <summary>The outer diameter in meters</summary>
         public double DiameterOuter { get; set; }
@@ -936,15 +928,14 @@ namespace XlsPipePlotBuildingBlocks
         /// <summary>The absolute coordinates (xyz) of node 2 (outlet) of the segment</summary>
         public CoordsXYZ Coords2 { get; set; }
 
+        /// <summary>The local coordinates (xyz) of node 1 (inlet) of the segment</summary>
+        public CoordsXYZ Coords1Local { get; set; }
+
+        /// <summary>The local coordinates (xyz) of node 2 (outlet) of the segment</summary>
+        public CoordsXYZ Coords2Local { get; set; }
+
         /// <summary>A unit vector along the direction of the segment</summary>
-        public CoordsXYZ Direction
-        {
-            get
-            {
-                var L = (Dx == 0 && Dy == 0 && Dz == 0) ? 1.0 : Length;
-                return new CoordsXYZ(L, AngleVertical, AngleAzimuthal, Dx, Dy, Dz).UnitVector;
-            }
-        }
+        public CoordsXYZ Direction { get; set; }
 
         /// <summary>A list with the connections of the segment</summary>
         public List<BaseConnection> Connections { get; set; }
@@ -962,9 +953,15 @@ namespace XlsPipePlotBuildingBlocks
         public BaseSegment(string InputString)
         {
             string[] inputWords = InputString.Split(';');
-            Coords1 = new CoordsXYZ();
-            Coords2 = new CoordsXYZ();
+            
             Connections = new List<BaseConnection>();
+
+            double readLength = 0;
+            double readAngleVertical = 0;
+            double readAngleAzimuthal = 0;
+            double readDx = 0;
+            double readDy = 0;
+            double readDz = 0;
 
             if (inputWords.Length >= 22)
             {
@@ -985,20 +982,20 @@ namespace XlsPipePlotBuildingBlocks
                 Drawing = inputWords[20];
                 Notes = inputWords[21];
                 
-                if (!Double.TryParse(inputWords[5], out tmpDbl)) tmpDbl = 0.0;
-                Length = tmpDbl;
-                if (!Double.TryParse(inputWords[6], out tmpDbl)) tmpDbl = 0.0;
-                AngleVertical = tmpDbl;
-                if (!Double.TryParse(inputWords[7], out tmpDbl)) tmpDbl = 0.0;
-                AngleAzimuthal = tmpDbl;
+                if (!Double.TryParse(inputWords[5], out readLength)) readLength = 0.0;
+                //Length = tmpDbl;
+                if (!Double.TryParse(inputWords[6], out readAngleVertical)) readAngleVertical = 0.0;
+                //AngleVertical = tmpDbl;
+                if (!Double.TryParse(inputWords[7], out readAngleAzimuthal)) readAngleAzimuthal = 0.0;
+                //AngleAzimuthal = tmpDbl;
                 if (!Double.TryParse(inputWords[8], out tmpDbl)) tmpDbl = 0.0;
                 AngleAxis = tmpDbl;
-                if (!Double.TryParse(inputWords[9], out tmpDbl)) tmpDbl = 0.0;
-                Dx = tmpDbl;
-                if (!Double.TryParse(inputWords[10], out tmpDbl)) tmpDbl = 0.0;
-                Dy = tmpDbl;
-                if (!Double.TryParse(inputWords[11], out tmpDbl)) tmpDbl = 0.0;
-                Dz = tmpDbl;
+                if (!Double.TryParse(inputWords[9], out readDx)) readDx = 0.0;
+                //Dx = tmpDbl;
+                if (!Double.TryParse(inputWords[10], out readDy)) readDy = 0.0;
+                //Dy = tmpDbl;
+                if (!Double.TryParse(inputWords[11], out readDz)) readDz = 0.0;
+                //Dz = tmpDbl;
                 if (!Double.TryParse(inputWords[12], out tmpDbl)) tmpDbl = 0.0;
                 DiameterOuter = tmpDbl * 0.001;
                 if (!Double.TryParse(inputWords[13], out tmpDbl)) tmpDbl = 0.0;
@@ -1037,6 +1034,34 @@ namespace XlsPipePlotBuildingBlocks
             {
                 //Logger.Warning("Not enough words: '{0}'", InputString);
             }
+
+            var L = (readDx == 0 && readDy == 0 && readDz == 0) ? 1.0 : readLength;
+            Direction = new CoordsXYZ(L, readAngleVertical, readAngleAzimuthal, readDx, readDy, readDz).UnitVector;
+            Coords1Local = new CoordsXYZ(0, 0, 0);
+            Coords2Local = new CoordsXYZ(readLength, readAngleVertical, readAngleAzimuthal, readDx, readDy, readDz);
+            Coords1 = new CoordsXYZ();
+            Coords2 = new CoordsXYZ();
+            if (UniqueId == "PIPE_115")
+            {
+                var apa = new CoordsXYZ(L, readAngleVertical, readAngleAzimuthal, readDx, readDy, readDz);
+                if (apa.Z == 0)
+                    Console.WriteLine(0);
+                else
+                    Console.WriteLine(Math.Asin(apa.Length / apa.Z) / (Math.PI/180));
+                //return Math.Asin(Length / Z) / deg2rad;
+            }
+                
+            //Console.WriteLine("PIPE_115");
+        }
+
+        public static string GetInputString(string Family = "Junction", string Type = "Unknown", string Name = "", string UniqueId = "", string TemplateFile = "", 
+            double Length = 0.00, double AngleVertical = 0.0, double AngleAzimuthal = 0.0, double AngleAxis = 0.0, double Dx = 0.0, double Dy = 0, double Dz = 0.0,
+            double DiameterOuter = 0.0, double WallThickness = 0.00, string Param1 = "", string Param2 = "", string FromId = "", string FromNode = "",
+            string ToId = "", string ToNode = "", string Drawing = "", string Notes = "")
+        {
+            return string.Format("{0};{1};{2};{3};{4};{5};{6};{7};{8};{9};{10};{11};{12};{13};{14};{15};{16};{17};{18};{19};{20};{21};",
+                Family, Type, Name, UniqueId, TemplateFile, Length, AngleVertical, AngleAzimuthal, AngleAxis, Dx, Dy, Dz, DiameterOuter, WallThickness, Param1, Param2,
+                FromId, FromNode, ToId, ToNode, Drawing, Notes);
         }
 
         /// <summary>
@@ -1047,21 +1072,21 @@ namespace XlsPipePlotBuildingBlocks
         public void SetCoordinates(CoordsXYZ NewCoords, int Node, double AxialTranslation = 0.0)
         {
             // Calculate the local coordinates of the segment
-            var coords1Local = new CoordsXYZ(X0: 0, Y0: 0, Z0: 0);
-            var coords2Local = new CoordsXYZ(Length, AngleVertical, AngleAzimuthal, Dx, Dy, Dz);
+            //var coords1Local = new CoordsXYZ(X0: 0, Y0: 0, Z0: 0);
+            //var coords2Local = new CoordsXYZ(Length, AngleVertical, AngleAzimuthal, Dx, Dy, Dz);
 
             // Calculate the local coordinates of the reference location (the distance of the AxialTranslation
             // in the direction of the unit vector in the same direction as the segment)
             CoordsXYZ coordsRefLocLocal;
             if (Node == 1)
-                coordsRefLocLocal = coords1Local + AxialTranslation * Direction;
+                coordsRefLocLocal = Coords1Local + AxialTranslation * Direction;
             else
-                coordsRefLocLocal = coords2Local + AxialTranslation * Direction;
+                coordsRefLocLocal = Coords2Local + AxialTranslation * Direction;
 
             // Calculate the translation and apply this on Coord1 and Coord2
             var translationVector = NewCoords - coordsRefLocLocal;
-            Coords1 = coords1Local + translationVector;
-            Coords2 = coords2Local + translationVector;
+            Coords1 = Coords1Local + translationVector;
+            Coords2 = Coords2Local + translationVector;
         }
 
         /// <summary>
@@ -1211,13 +1236,13 @@ namespace XlsPipePlotBuildingBlocks
 
             if (Segment != null)
             {
-                KeywordsAndValues.Add("LENGTH", this.Segment.Length.ToString());
+                KeywordsAndValues.Add("LENGTH", Segment.Length.ToString());
                 KeywordsAndValues.Add("DO", this.Segment.DiameterOuter.ToString());
                 KeywordsAndValues.Add("WALLTHICKNESS", this.Segment.WallThickness.ToString());
                 KeywordsAndValues.Add("PARAM1", this.Segment.Parameter1.ToString());
                 KeywordsAndValues.Add("PARAM2", this.Segment.Parameter2.ToString());
-                KeywordsAndValues.Add("ANGLE_VERTICAL", this.Segment.AngleVertical.ToString());
-                KeywordsAndValues.Add("ANGLE_AZIMUTHAL", this.Segment.AngleAzimuthal.ToString());
+                KeywordsAndValues.Add("ANGLE_VERTICAL", Segment.AngleVertical.ToString());
+                KeywordsAndValues.Add("ANGLE_AZIMUTHAL", Segment.AngleAzimuthal.ToString());
                 KeywordsAndValues.Add("ANGLE_AXIS", this.Segment.AngleAxis.ToString());
                 KeywordsAndValues.Add("COORDS1_LOC", this.Segment.Coords1.Repr(Component.Coords1));
 
@@ -1450,6 +1475,8 @@ namespace XlsPipePlotBuildingBlocks
     /// </summary>
     public class CoordsXYZ
     {
+        private const double deg2rad = 0.01745329251994329577;
+
         /// <summary>The x-coordinate</summary>
         public double X { get; set; }
 
@@ -1459,7 +1486,39 @@ namespace XlsPipePlotBuildingBlocks
         /// <summary>The z-coordinate</summary>
         public double Z { get; set; }
 
+        /// <summary>The length of the vector</summary>
         public double Length { get { return Math.Sqrt(Math.Pow(X, 2) + Math.Pow(Y, 2) + Math.Pow(Z, 2)); } }
+
+        public double AngleVertical
+        {
+            get
+            {
+                if (Length == 0)
+                    return 0;
+                else
+                    return Math.Asin(Z/Length)/deg2rad;
+            }
+        }
+
+        public double AngleAzimuthal
+        {
+            get
+            {
+                if (Length == 0)
+                    return 0;
+                else
+                {
+                    double azim;
+                    azim = Math.Atan2(Y, X) / deg2rad;
+                    if (azim > 0)
+                        azim = 360 - azim;
+                    else
+                        azim = Math.Abs(azim);
+
+                    return azim;
+                }
+            }
+        }
 
         /// <summary>Returns the unit vector of the object</summary>
         public CoordsXYZ UnitVector
@@ -1491,7 +1550,6 @@ namespace XlsPipePlotBuildingBlocks
 
         public CoordsXYZ(double L1, double VerticalAngle, double AzimuthalAngle, double dX0, double dY0, double dZ0)
         {
-            double deg2rad = Math.PI / 180;
             X = 0 + L1 * Math.Cos(VerticalAngle * deg2rad) * Math.Cos(AzimuthalAngle * deg2rad) + dX0;
             Y = 0 - L1 * Math.Cos(VerticalAngle * deg2rad) * Math.Sin(AzimuthalAngle * deg2rad) + dY0;
             Z = 0 + L1 * Math.Sin(VerticalAngle * deg2rad) + dZ0;
