@@ -48,3 +48,13 @@ C:\DevTemp\XlsPipePlot_loopcheck\source\obj\Debug\XlsPipePlot.csproj.CoreCompile
 C:\DevTemp\XlsPipePlot_loopcheck\source\obj\Debug\XlsPipePlot.csproj.CopyComplete
 C:\DevTemp\XlsPipePlot_loopcheck\source\obj\Debug\XlsPipePlot.exe
 C:\DevTemp\XlsPipePlot_loopcheck\source\obj\Debug\XlsPipePlot.pdb
+C:\Danne\Kodning\XlsPipePlot_components\source\bin\Debug\XlsPipePlot.exe.config
+C:\Danne\Kodning\XlsPipePlot_components\source\bin\Debug\XlsPipePlot.exe
+C:\Danne\Kodning\XlsPipePlot_components\source\bin\Debug\XlsPipePlot.pdb
+C:\Danne\Kodning\XlsPipePlot_components\source\bin\Debug\Newtonsoft.Json.dll
+C:\Danne\Kodning\XlsPipePlot_components\source\bin\Debug\Newtonsoft.Json.xml
+C:\Danne\Kodning\XlsPipePlot_components\source\obj\Debug\XlsPipePlot.csprojAssemblyReference.cache
+C:\Danne\Kodning\XlsPipePlot_components\source\obj\Debug\XlsPipePlot.csproj.CoreCompileInputs.cache
+C:\Danne\Kodning\XlsPipePlot_components\source\obj\Debug\XlsPipePlot.csproj.CopyComplete
+C:\Danne\Kodning\XlsPipePlot_components\source\obj\Debug\XlsPipePlot.exe
+C:\Danne\Kodning\XlsPipePlot_components\source\obj\Debug\XlsPipePlot.pdb

@@ -520,7 +520,7 @@ namespace XlsPipePlot
             s.WriteLine("");
             s.WriteLine("");
             s.WriteLine("// Section");
-            s.WriteLine("scale([1000, 1000, 1000])");
+            s.WriteLine("scale([1, 1, 1])");
             s.WriteLine("{");
 
             foreach (BaseComponent component in Components)
@@ -533,7 +533,7 @@ namespace XlsPipePlot
                     s.WriteLine("");
                     s.WriteLine("");
                     s.WriteLine(string.Format("// {0}", Caption));
-                    s.WriteLine("scale([1000, 1000, 1000])");
+                    s.WriteLine("scale([1, 1, 1])");
                     s.WriteLine("{");
                 }
                     
@@ -557,7 +557,7 @@ namespace XlsPipePlot
             s.WriteLine("}");
             s.WriteLine("");
 
-            s.WriteLine("scale([1000, 1000, 1000])");
+            s.WriteLine("scale([1, 1, 1])");
             s.WriteLine("{");
 
             foreach (BaseComponent component in Components)
@@ -1291,6 +1291,7 @@ namespace XlsPipePlotBuildingBlocks
                 KeywordsAndValues.Add("ANGLE_AZIMUTHAL", Segment.AngleAzimuthal.ToString());
                 KeywordsAndValues.Add("ANGLE_AXIS", this.Segment.AngleAxis.ToString());
                 KeywordsAndValues.Add("COORDS1_LOC", this.Segment.Coords1.Repr(Component.Coords1));
+                KeywordsAndValues.Add("NOTES", string.Format("\"{0}\"", this.Segment.Notes));
 
                 // Add keywords to access the TargetSegment properties. If connection is connected (TargetSegment != null), 
                 // replace this
@@ -1507,6 +1508,7 @@ namespace XlsPipePlotBuildingBlocks
             strOut = strOut.Replace("(DO)", Component.Segments[0].DiameterOuter.ToString());
             strOut = strOut.Replace("(WALLTHICKNESS)", Component.Segments[0].WallThickness.ToString());
             strOut = strOut.Replace("(NODES)", nodes);
+            strOut = strOut.Replace("(NOTES)", string.Format("\"{0}\"", Component.Segments[0].Notes));
             strOut = strOut.Replace("(BENDRADIUS)", bendradius);
             strOut = strOut.Replace("(VECTOR_PARAM1)", param1Vect);
             strOut = strOut.Replace("(VECTOR_PARAM2)", param2Vect);
