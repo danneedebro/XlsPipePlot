@@ -38,11 +38,14 @@
   "DefaultTemplateSegment": {
     "Tank": "TankDefault2.scad",
     "Pipe": "Cylinder.scad",
-    "Connection": "TankDefault2.scad",
+    "Connection": "Cylinder.scad",
+    "": "Null.scad",
     "Valve": "ValveDefault.scad",
     "ValvePRV": "ValvePRV.scad",
     "Reducer": "ReducerStraight.scad",
     "ReducerAuto": "ReducerStraightAuto.scad",
+    "FlangeInlet": "FlangeInlet.scad",
+    "FlangeOutlet": "FlangeOutlet.scad",
     "Penetration": "WallPenetration.scad"
   },
   "DefaultColors": {
