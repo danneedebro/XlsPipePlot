@@ -154,11 +154,14 @@ namespace XlsPipePlot
                 {
                     // Read the stream to a string, and write the string to the console.
                     string line = String.Empty;
+                    var word1 = "";
+                    var word1Prev = "";
                     while ((line = sr.ReadLine()) != null)
                     {
                         string[] inputs = line.Split(';');
+                        word1 = inputs[0];
 
-                        switch (inputs[0])
+                        switch (word1)
                         {
                             case "Pipe":
                             case "Volume":
@@ -166,12 +169,12 @@ namespace XlsPipePlot
                             case "Junction":
                                 currentSegment = new BaseSegment(line);
 
-                                if (currentSegment.Type != previousSegment.Type)
+                                if (word1 != word1Prev)
                                 {
                                     var newComponent = new BaseComponent(currentSegment);
                                     Components.Add(newComponent);
                                 }
-                                else if(currentSegment.Type == previousSegment.Type)
+                                else if(word1 == word1Prev)
                                 {
                                     // If Pipe and changing dimensions - add a reducer between
                                     if (Settings.PipeAutoReducer.ContainsKey(currentSegment.Type) && (currentSegment.DiameterOuter != previousSegment.DiameterOuter || currentSegment.WallThickness != previousSegment.WallThickness) )
@@ -191,6 +194,7 @@ namespace XlsPipePlot
                                         Components[Components.Count - 1].AddSegment(currentSegment);
                                     }
                                 }
+                                previousSegment = currentSegment;
                                 break;
 
                             case "Refvol":
@@ -206,10 +210,10 @@ namespace XlsPipePlot
                                 break;
 
                             default:
-                                currentSegment = new BaseSegment("");
+                                //currentSegment = new BaseSegment("");
                                 break;
                         }
-                        previousSegment = currentSegment;
+                        word1Prev = word1;
                     }
                 }
             }
@@ -505,7 +509,10 @@ namespace XlsPipePlot
             FileStream f = new FileStream(Filename, FileMode.Create);
             StreamWriter s = new StreamWriter(f);
 
-            s.WriteLine("// Generated " + DateTime.Now.ToString());
+            s.WriteLine("// Generated using XlsPipePlot " + DateTime.Now.ToString());
+            s.WriteLine("//");
+            s.WriteLine("// https://github.com/danneedebro/XlsPipePlot");
+            s.WriteLine("");
             s.WriteLine("$fn=50;");
             foreach (KeyValuePair<string, string> kvp in Settings.IncludeList)
                 s.WriteLine(string.Format("include <{0}>", kvp.Value));
@@ -1361,7 +1368,7 @@ namespace XlsPipePlotBuildingBlocks
             var output = new StringBuilder();
 
             // If no segment is given - return output for whole component
-            output.AppendFormat("// Type={1}, Name={2}, Id={3}{0}", Environment.NewLine, Component.Type, Component.Name, Component.Segments[0].UniqueId);
+            output.AppendFormat("// Component: Type={1}, Name={2}, Id={3}{0}", Environment.NewLine, Component.Type, Component.Name, Component.Segments[0].UniqueId);
             output.AppendFormat("color({1}){0}", Environment.NewLine, Component.Color);
             output.AppendFormat("translate({1}){0}", Environment.NewLine, Component.Coords1.Repr());
             output.AppendFormat("{{ {0}", Environment.NewLine);
@@ -1378,7 +1385,7 @@ namespace XlsPipePlotBuildingBlocks
                 foreach (BaseSegment segment in Component.Segments)
                     output.AppendLine(segment.Template.OutputSegment(1));
             }
-            output.AppendFormat("}} {0}", Environment.NewLine);
+            output.AppendFormat("}}{0}", Environment.NewLine);
 
             // Add requested indent before every line
             output.Insert(0, new string(' ', 4 * IndentLevel));
@@ -1397,16 +1404,17 @@ namespace XlsPipePlotBuildingBlocks
         {
             var output = new StringBuilder();
 
+            output.AppendFormat("// Segment: Type={1}, Name={2}, Id={3}{0}", Environment.NewLine, Segment.Type, Segment.Name, Segment.UniqueId);
             output.AppendFormat("translate((COORDS1_LOC)){0}", Environment.NewLine);
             output.AppendFormat("rotate([(ANGLE_AXIS),-1*(ANGLE_VERTICAL),-1*(ANGLE_AZIMUTHAL)]){0}", Environment.NewLine);
-            output.AppendFormat("{{ {0}", Environment.NewLine);
+            output.AppendFormat("{{{0}", Environment.NewLine);
 
             var segmentRead = _readText;
             segmentRead = segmentRead.Insert(0, new string(' ', 4));
             segmentRead = segmentRead.Replace(Environment.NewLine, Environment.NewLine + new String(' ', 4));  // Add 1 level of indent
 
             output.AppendLine(segmentRead);
-            output.AppendFormat("}} {0}", "");  //Environment.NewLine);
+            output.AppendFormat("}}{0}", "");  //Environment.NewLine);
 
             // Add requested indent before every line
             output.Insert(0, new string(' ', 4 * IndentLevel));
