@@ -32,13 +32,15 @@
   },
   // These are
   "DefaultTemplateComponent": {
-    "Pipe": "PipeSegment.scad"
+    "Pipe": "PipeSegment.scad",
+    "Text": "Annotation.scad"
   },
   "DefaultTemplateSegment": {
     "Tank": "TankDefault2.scad",
     "Pipe": "Cylinder.scad",
     "Connection": "TankDefault2.scad",
     "Valve": "ValveDefault.scad",
+    "ValvePRV": "ValvePRV.scad",
     "Reducer": "ReducerStraight.scad",
     "ReducerAuto": "ReducerStraightAuto.scad",
     "Penetration": "WallPenetration.scad"
