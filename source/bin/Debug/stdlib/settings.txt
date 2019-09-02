@@ -28,9 +28,8 @@
 {
   "IncludeList": {},
   "UseList": {
-    "Default1": "curvedPipe.scad"
+    "Default1": "curvedPipe_solid.scad"
   },
-  // These are
   "DefaultTemplateComponent": {
     "Pipe": "PipeSegment.scad",
     "Text": "Annotation.scad"

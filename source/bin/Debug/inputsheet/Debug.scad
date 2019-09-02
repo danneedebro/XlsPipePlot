@@ -1,9 +1,9 @@
-// Generated using XlsPipePlot 2019-09-01 22:40:58
+// Generated using XlsPipePlot 2019-09-02 09:47:53
 //
 // https://github.com/danneedebro/XlsPipePlot
 
 $fn=50;
-use <curvedPipe.scad>
+use <curvedPipe_solid.scad>
 
 colorPipe = "grey";
 colorTank = "grey";
@@ -322,7 +322,7 @@ scale([1, 1, 1])
     color(colorPipe)
     translate([2.5000,2.2000,104.2400])
     { 
-        curvedPipe([[0.0000,0.0000,0.0000],[0.0000,0.0000,-1.0000],[0.0000,-1.0000,-1.0000],[0.0000,-1.0000,-2.0000]],3,[0.15,0.15,0.15],0.1,0.1-2*0.002);
+        curvedPipe([[0.0000,0.0000,0.0000],[0.0000,0.0000,-1.0000],[0.0000,-1.0000,-1.0000],[0.0000,-1.0000,-2.0000]],3,[0.15,0.15,0.15],0.1,0.1-2*0);
     }
     
     // Component: Type=Connection, Name=Connection, Id=COMP_95
@@ -405,6 +405,24 @@ scale([1, 1, 1])
         rotate([0,-1*-90,-1*0])
         {
             rotate([0,90,0]) { cylinder(h=0.4, r=0.1/2); translate([0,0,0.4-0.1*0.1]) cylinder(h=0.1*0.1, r=0.1*1.5/2); }
+        }
+    }
+    
+    // Component: Type=Connection, Name=Connection, Id=COMP_107
+    color("red")
+    translate([0.8000,0.7500,104.6400])
+    { 
+        // Segment: Type=Connection, Name=Connection, Id=COMP_107
+        translate([0.0000,0.0000,0.0000])
+        rotate([0,-1*0,-1*0])
+        {
+            
+            rotate([0,-1*0,-1*270])
+            rotate([0,90,0]) difference(){
+               union(){cylinder(h=0.25*0.1, r=0.1*1.1/2, center=true); cube([0.125*0.1,1.5*0.1,0.25*0.1],center=true);}
+               cylinder(h=0.3*0.1, r=0.1/2, center=true);
+            }
+               
         }
     }
     
