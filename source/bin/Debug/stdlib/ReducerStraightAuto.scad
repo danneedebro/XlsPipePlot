@@ -1,21 +1,10 @@
 $fn=50;  // REMOVE
-LENGTH = 0; // REMOVE
-DO = 0.0889; // REMOVE
-WALLTHICKNESS = 0.00391; // REMOVE
-PARAM1 = 1.28; // REMOVE
-PARAM2 = 0; // REMOVE
-ANGLE_VERTICAL = 90; // REMOVE
-ANGLE_AZIMUTHAL = 0; // REMOVE
-ANGLE_AXIS = 0; // REMOVE
-COORDS1_LOC = [0.0000,0.0000,0.0000]; // REMOVE
-C1_DO = 0.0889; // REMOVE
-C1_ANGLE_VERTICAL = 90; // REMOVE
-C1_ANGLE_AZIMUTHAL = 0; // REMOVE
-C1_ANGLE_AXIS = 0; // REMOVE
-C2_DO = 0.06032; // REMOVE
-C2_ANGLE_VERTICAL = 90; // REMOVE
-C2_ANGLE_AZIMUTHAL = 0; // REMOVE
-C2_ANGLE_AXIS = 0; // REMOVE
-rotate([0,90,0])
-translate([0, 0, (LENGTH)/2])
-cylinder(h = (LENGTH), r = (DO)/2, center = true);
+LENGTH = 1;  // REMOVE
+DO = max(0.1,0.2); // REMOVE
+C1_DO = 0.2; // REMOVE
+C2_DO = 0.1; // REMOVE
+PARAM1 = 0.2; // REMOVE
+rotate([(C1_ANGLE_AXIS),-1*(C1_ANGLE_VERTICAL),-1*(C1_ANGLE_AZIMUTHAL)])
+rotate([0, 90, 0])
+translate([0, 0, ((C1_DO)>(C2_DO))?(C1_DO)/4:-(C1_DO)/4])
+cylinder(h = max((C1_DO),(C2_DO))/2, r1 = (C1_DO)/2, r2 = (C2_DO)/2, center = true);
