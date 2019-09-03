@@ -1,9 +1,10 @@
-// Generated using XlsPipePlot 2019-09-02 09:47:53
+// Generated using XlsPipePlot 2019-09-03 23:15:17
 //
 // https://github.com/danneedebro/XlsPipePlot
+//
 
 $fn=50;
-use <curvedPipe_solid.scad>
+use <C:\Danne\Kodning\XlsPipePlot_2sep\stdlib\curvedPipe_solid.scad>
 
 colorPipe = "grey";
 colorTank = "grey";
@@ -266,8 +267,13 @@ scale([1, 1, 1])
     color("green")
     translate([2.5000,2.2000,105.2400])
     { 
-        rotate([-(90-$vpr[0]),0,$vpr[2]])
-        rotate([90,0,0]) scale($vpd/5*[0.05/10,0.05/10,0.05/10]) text("PRV", size=10);
+        // Segment: Type=Text, Name=Connection, Id=COMP_80
+        translate([0.0000,0.0000,0.0000])
+        rotate([0,-1*0,-1*0])
+        {
+            rotate([-(90-$vpr[0]),0,$vpr[2]])
+            rotate([90,0,0]) scale($vpd/5*[0.05/10,0.05/10,0.05/10]) text("PRV", size=10);
+        }
     }
     
 }

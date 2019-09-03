@@ -1,12 +1,28 @@
 $fn=50;  // REMOVE
-LENGTH = 1;  // REMOVE
-DO = 0.1; // REMOVE
-rotate([0, 90, 0])
-translate([0, 0, (LENGTH)/2])
+DO = 1.2; // REMOVE
+PARAM1 = 0.75; // REMOVE
+LENGTH = 2.0; // REMOVE
+rotate([0,90,0])
+translate([0,0,(LENGTH)/2])
+union()
 {
-    cylinder(h = (LENGTH)-(DO), r = (DO)/2, center = true);
-    translate([0,0,((LENGTH)-(DO))/2])
-    sphere(r = (DO)/2);
-    translate([0,0,-((LENGTH)-(DO))/2])
-    sphere(r = (DO)/2);
+    union()
+    {
+        intersection()
+        {
+            translate([0,0,(LENGTH)/2]) translate([0,0,-(PARAM1)]) sphere(r=(PARAM1));
+            cylinder(h = (LENGTH)/2, r = (DO)/2);
+        }
+        cylinder(h = (LENGTH)/2-(PARAM1), r=(DO)/2);
+    }
+    mirror([0,0,1])
+    union()
+    {
+        intersection()
+        {
+            translate([0,0,(LENGTH)/2]) translate([0,0,-(PARAM1)]) sphere(r=(PARAM1));
+            cylinder(h = (LENGTH)/2, r = (DO)/2);
+        }
+        cylinder(h = (LENGTH)/2-(PARAM1), r=(DO)/2);
+    }
 }

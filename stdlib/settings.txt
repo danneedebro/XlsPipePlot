@@ -28,20 +28,27 @@
 {
   "IncludeList": {},
   "UseList": {
-    "Default1": "curvedPipe.scad"
+    "Default1": ["curvedPipe_solid.scad"]
   },
-  // These are
+  "Dependencies": {
+    "Pipe": ["curvedPipe_solid.scad", "moreShapes.scad", "vector.scad", "maths.scad"]
+  },
   "DefaultTemplateComponent": {
     "Pipe": "PipeSegment.scad"
   },
   "DefaultTemplateSegment": {
-    "Tank": "TankDefault2.scad",
+    "Tank": "TankDefault.scad",
     "Pipe": "Cylinder.scad",
-    "Connection": "TankDefault2.scad",
+    "Connection": "Cylinder.scad",
+    "": "Null.scad",
     "Valve": "ValveDefault.scad",
+    "ValvePRV": "ValvePRV.scad",
     "Reducer": "ReducerStraight.scad",
     "ReducerAuto": "ReducerStraightAuto.scad",
-    "Penetration": "WallPenetration.scad"
+    "FlangeInlet": "FlangeInlet.scad",
+    "FlangeOutlet": "FlangeOutlet.scad",
+    "Penetration": "WallPenetration.scad",
+    "Text": "Annotation.scad"
   },
   "DefaultColors": {
     "Pipe": "colorPipe",
