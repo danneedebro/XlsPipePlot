@@ -1,10 +1,10 @@
-// Generated using XlsPipePlot 2019-09-08 15:52:09
+// Generated using XlsPipePlot 2019-09-08 21:51:15
 //
 // https://github.com/danneedebro/XlsPipePlot
 //
 
 $fn=50;
-use <C:\Danne\Kodning\XlsPipePlot_2sep\stdlib\curvedPipe_solid.scad>
+use <C:\Danne\Kodning\XlsPipePlot_keyvalues\source\bin\stdlib\curvedPipe_solid.scad>
 
 colorPipe = "grey";
 colorTank = "grey";
@@ -54,6 +54,7 @@ scale([1, 1, 1])
                 }
             }
         }
+        
     }
     
     // Component: Type=Connection, Name=Conn, Id=JUNC_35
@@ -66,6 +67,7 @@ scale([1, 1, 1])
         {
             rotate([0,90,0]) cylinder(h=0, r=0.09793/2);
         }
+        
     }
     
     // Component: Type=Pipe, Name=Pipe, Id=PIPE_37
@@ -89,6 +91,7 @@ scale([1, 1, 1])
             translate([0.2/2, 0, 0.2/4])
             cylinder(h = 0.2/2, r = 0.1/2, center = true);
         }
+        
     }
     
     // Component: Type=Pipe, Name=Pipe, Id=PIPE_44
@@ -108,6 +111,7 @@ scale([1, 1, 1])
         {
             rotate([0,90,0]) cylinder(h=1, r=0/2);
         }
+        
     }
     
     // Component: Type=Tank, Name=T2, Id=VOL_50
@@ -143,6 +147,7 @@ scale([1, 1, 1])
                 }
             }
         }
+        
     }
     
 }
@@ -161,6 +166,7 @@ scale([1, 1, 1])
         {
             rotate([0,90,0]) cylinder(h=0, r=0.09793/2);
         }
+        
     }
     
     // Component: Type=Pipe, Name=Pipe, Id=PIPE_57
@@ -184,6 +190,7 @@ scale([1, 1, 1])
             translate([0.2/2, 0, 0.2/4])
             cylinder(h = 0.2/2, r = 0.1/2, center = true);
         }
+        
     }
     
     // Component: Type=Pipe, Name=Pipe, Id=PIPE_62
@@ -203,6 +210,7 @@ scale([1, 1, 1])
         {
             rotate([0,90,0]) cylinder(h=0, r=0.09793/2);
         }
+        
     }
     
 }
@@ -221,6 +229,7 @@ scale([1, 1, 1])
         {
             rotate([0,90,0]) cylinder(h=0, r=0/2);
         }
+        
     }
     
     // Component: Type=Pipe, Name=Pipe, Id=PIPE_72
@@ -254,6 +263,7 @@ scale([1, 1, 1])
                 translate([0,0,0.05*2]) cylinder(h = 0.05*3, r =0.05*0.5/2);
             }
         }
+        
     }
     
     // Component: Type=Pipe, Name=Pipe, Id=PIPE_76
@@ -274,6 +284,7 @@ scale([1, 1, 1])
             rotate([-(90-$vpr[0]),0,$vpr[2]])
             rotate([90,0,0]) scale($vpd/5*[0.05/10,0.05/10,0.05/10]) text("PRV", size=10);
         }
+        
     }
     
 }
@@ -294,6 +305,7 @@ scale([1, 1, 1])
             translate([0, 0, 0.3/2])
             cylinder(h = 0.3, r1 = 0.1/2, r2 = 0.05/2, center = true);
         }
+        
         // Segment: Type=Valve, Name=Connection, Id=COMP_85
         translate([0.0000,0.0000,0.3000])
         rotate([0,-1*90,-1*0])
@@ -304,18 +316,21 @@ scale([1, 1, 1])
             translate([0.3/2, 0, 0.3/4])
             cylinder(h = 0.3/2, r = 0.05/2, center = true);
         }
+        
         // Segment: Type=Pipe, Name=Connection, Id=COMP_86
         translate([0.0000,0.0000,0.6000])
         rotate([0,-1*0,-1*270])
         {
             rotate([0,90,0]) cylinder(h=0.5, r=0.05/2);
         }
+        
         // Segment: Type=, Name=Connection, Id=COMP_87
         translate([0.0000,0.5000,0.6000])
         rotate([0,-1*90,-1*0])
         {
             
         }
+        
     }
     
 }
@@ -341,6 +356,7 @@ scale([1, 1, 1])
         {
             rotate([0,90,0]) cylinder(h=0, r=0/2);
         }
+        
     }
     
     // Component: Type=FlangeInlet, Name=Inlet, Id=VOL_97
@@ -430,6 +446,7 @@ scale([1, 1, 1])
             }
                
         }
+        
     }
     
 }

@@ -350,7 +350,7 @@ namespace XlsPipePlot
                     else
                     {
                         Logger.Warning("Default segment template file '{0}' for type={1} doesn't exist in local or main component library. Adding default.", fn, segment.Type);
-                        segment.Template.AddComp(string.Format("rotate([0,90,0]){0}translate([0, 0, (LENGTH)/2]){0}cylinder(h = (LENGTH), r = (DO)/2, center = true);", Environment.NewLine));
+                        segment.Template.AddComp(string.Format("rotate([0,90,0]){0}cylinder(h=(LENGTH), r=(DO)/2);", Environment.NewLine));
                         segment.Template.WriteTemplateFile(PathLocal + fn);
                     }
 
@@ -364,16 +364,28 @@ namespace XlsPipePlot
                         {
                             segment.Filename = PathLocal + segment.Filename;
                             localFilenames.Add(segment.Filename);
+                            //Logger.Warning("File exists in pathloc");
                         }
                         else if (File.Exists(PathMain + segment.Filename) == true)
                         {
                             segment.Template.ReadTemplateFile(PathMain + segment.Filename);
                             segment.Filename = "";
+                            //Logger.Warning("File exists in pathmain");
                         }
                         else
                         {
-                            segment.Filename = PathLocal + segment.Filename;
-                            localFilenames.Add(segment.Filename);
+                            var answ = Logger.QuestionYesNo("File {0} doesn't exist. Crete from default template? Yes(y), No(n) or Abort(a): ", segment.Filename);
+                            if (answ == 1)
+                            {
+                                segment.Filename = PathLocal + segment.Filename;
+                                localFilenames.Add(segment.Filename);
+                            }
+                            else
+                            {
+                                segment.Filename = "";
+                                if (answ == -1) Environment.Exit(1);
+                            }
+                            
                         }
                     }
                 }
@@ -388,7 +400,7 @@ namespace XlsPipePlot
                     // Update component template with information read from local file (if file doesn't exists it is created)
                     component.Template.ReadTemplateFile(component.Filename);
                 }
-
+                
                 // Update segment template with information from from specified template files (both in local and main path)
                 foreach (BaseSegment segment in component.Segments)
                 {
@@ -563,7 +575,7 @@ namespace XlsPipePlot
                     s.WriteLine("{");
                 }
                     
-                s.WriteLine(component.Template.OutputComponent(IndentLevel: 1));
+                s.WriteLine(component.WriteOutput());
             }
             s.WriteLine("}");
             s.WriteLine("");
@@ -902,6 +914,86 @@ namespace XlsPipePlotBuildingBlocks
             }
             return Result;
         }
+
+        public string WriteOutput()
+        {
+            var indent = "    ";
+            var componentOutput = new StringBuilder();
+
+            // If no segment is given - return output for whole component
+            componentOutput.AppendFormat("// Component: Type={1}, Name={2}, Id={3}{0}", Environment.NewLine, Type, Name, Segments[0].UniqueId);
+            componentOutput.AppendFormat("color({1}){0}", Environment.NewLine, Color);
+            componentOutput.AppendFormat("translate({1}){0}", Environment.NewLine, Coords1.Repr());
+            componentOutput.AppendFormat("{{ {0}", Environment.NewLine);
+
+            if (Template.ReadText != null) // If component consists of one multi-segment template file 
+            {
+                componentOutput.AppendLine(indent + Template.ReadText.Replace(Environment.NewLine, Environment.NewLine + indent));
+            }
+            else  // If component consists of one or several single-segment template files
+            {
+                foreach (BaseSegment segment in Segments)
+                {
+                    var segmentOutput = new StringBuilder();
+
+                    segmentOutput.AppendFormat("// Segment: Type={1}, Name={2}, Id={3}{0}", Environment.NewLine, segment.Type, segment.Name, segment.UniqueId);
+                    segmentOutput.AppendFormat("translate((COORDS1_LOC)){0}", Environment.NewLine);
+                    segmentOutput.AppendFormat("rotate([(ANGLE_AXIS),-1*(ANGLE_VERTICAL),-1*(ANGLE_AZIMUTHAL)]){0}", Environment.NewLine);
+                    segmentOutput.AppendFormat("{{{0}", Environment.NewLine);
+
+                    segmentOutput.AppendLine(indent + segment.Template.ReadText.Replace(Environment.NewLine, Environment.NewLine + indent));
+                    segmentOutput.AppendLine("}");  //Environment.NewLine);
+
+                    // Replace keywords in current segment with its values
+                    string segmentOutputString = ReplaceKeywords(segmentOutput.ToString(), segment.KeyValues);
+
+                    // Replace 
+                    var cnt = 0;
+                    foreach (BaseConnection connection in segment.Connections)
+                    {
+                        cnt += 1;
+                        if (connection.IsConnected)
+                            segmentOutputString = ReplaceKeywords(segmentOutputString, connection.TargetSegment.KeyValues, Prefix: string.Format("C{0}_", cnt));
+                    }
+
+                    // Add replaced string to component output after indenting it
+                    componentOutput.AppendLine(indent + segmentOutputString.Replace(Environment.NewLine, Environment.NewLine + indent));
+                }
+            }
+            componentOutput.AppendLine("}");
+
+            // Replace keywords in current component with its values
+            string componentOutputString = ReplaceKeywords(componentOutput.ToString(), KeyValues);
+
+            // Replace keywords with indexes (LENGTH_0, LENGTH_1, etc) with their values
+            for (int i = 0; i < Segments.Count; i++)
+            {
+                componentOutputString = ReplaceKeywords(componentOutputString, Segments[i].KeyValues, Suffix: string.Format("_{0}", i));
+            }
+
+            return indent + componentOutputString.Replace(Environment.NewLine, Environment.NewLine + indent);
+        }
+
+        /// <summary>
+        /// Replaces all occurances of the string "({Prefix}{Key}{Suffix})" with its (string) values
+        /// </summary>
+        /// <param name="InputString">The string to replace</param>
+        /// <param name="KeyValueDict"></param>
+        /// <param name="Prefix">A string before the key (default="")</param>
+        /// <param name="Suffix">A string after the key (default="")</param>
+        /// <returns></returns>
+        private string ReplaceKeywords(string InputString, Dictionary<string, string> KeyValueDict, string Prefix = "", string Suffix = "")
+        {
+            string outputString = InputString;
+
+            foreach (KeyValuePair<string, string> kvp in KeyValueDict)
+            {
+                outputString = outputString.Replace(string.Format("({0}{1}{2})", Prefix, kvp.Key, Suffix), kvp.Value);
+            }
+
+            return outputString;
+        }
+
 
         /// <summary>
         /// Iterator method to access all connections in the component
@@ -1326,6 +1418,8 @@ namespace XlsPipePlotBuildingBlocks
     {
         private string _readText = "";
 
+        public string ReadText { get; set; }
+
         private readonly BaseComponent Component;
         private readonly BaseSegment Segment;
 
@@ -1349,6 +1443,7 @@ namespace XlsPipePlotBuildingBlocks
         /// <param name="ManuallyAddedText">The text that describes the component or segment template.</param>
         public void AddComp(string ManuallyAddedText)
         {
+            ReadText = ManuallyAddedText;
             _readText = ManuallyAddedText;
         }
 
@@ -1382,6 +1477,7 @@ namespace XlsPipePlotBuildingBlocks
                 Console.WriteLine(e.Message);
                 readSegment.AppendFormat("// Error, {1} could not be read.{0}", Environment.NewLine, Filename);
             }
+            ReadText = readSegment.ToString().TrimEnd(Environment.NewLine.ToCharArray());
             _readText = readSegment.ToString().TrimEnd(Environment.NewLine.ToCharArray());
         }
 
@@ -1507,6 +1603,11 @@ namespace XlsPipePlotBuildingBlocks
             s.Close();
             f.Close();
         }
+
+        /*public void WriteToFile(string Filename, BaseComponent Comp)
+        {
+            Comp.WriteOutput()
+        }*/
 
         /// <summary>
         /// Method that replaces keywords (LENGTH, DO, etc) within a string with its value
@@ -1764,6 +1865,20 @@ namespace Bloat
 
         public static int NumberOfWarnings = 0;
         public static int NumberOfErrors = 0;
+
+        public static int QuestionYesNo(string format, params object[] args)
+        {
+            ConsoleKey response;
+            Console.Write(string.Format(format, args)); 
+            response = Console.ReadKey().Key; // Gets the user's response.
+            Console.WriteLine(); // Breaks the line.
+            if (response == ConsoleKey.Y)
+                return 1;
+            else if (response == ConsoleKey.N)
+                return 0;
+            else
+                return -1;
+        }
 
         public static void CriticalAndKill(string format, params object[] args)
         {
