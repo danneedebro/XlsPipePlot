@@ -785,6 +785,28 @@ namespace XlsPipePlotBuildingBlocks
         /// <summary>The CoordsXYZ object of the outlet (node 2 of segment N) of the component</summary>
         public CoordsXYZ Coords2 { get { return Segments[Segments.Count - 1].Coords2; } }
 
+        /// <summary>A dictionary containing the keywords (LENGTH, DO, etc) and values for the component.</summary>
+        public Dictionary<string, string> KeyValues
+        {
+            get
+            {
+                Dictionary<string, string> _keyValues = new Dictionary<string, string>()
+                {
+                    {"DO",Segments[0].DiameterOuter.ToString()}, {"WALLTHICKNESS",Segments[0].WallThickness.ToString()},  {"SEGMENTS",Segments.Count.ToString()}
+                };
+                var nodes = "[" + string.Join(",", Segments.Select(BaseSegment => BaseSegment.Coords1.Repr(Coords1)).ToList()) + "," + Segments[Segments.Count - 1].Coords2.Repr(Coords1) + "]";
+                var bendradius = "[" + string.Join(",", Segments.Select(BaseSegment => BaseSegment.Parameter1 * BaseSegment.DiameterOuter).ToList()) + "]";
+                var param1Vect = "[" + string.Join(",", Segments.Select(BaseSegment => BaseSegment.Parameter1).ToList()) + "]";
+                var param2Vect = "[" + string.Join(",", Segments.Select(BaseSegment => BaseSegment.Parameter2).ToList()) + "]";
+
+                _keyValues.Add("NODES", nodes);
+                _keyValues.Add("BENDRADIUS", bendradius);
+                _keyValues.Add("VECTOR_PARAM1", param1Vect);
+                _keyValues.Add("VECTOR_PARAM2", param2Vect);
+                return _keyValues;
+            }
+        }
+
         /// <summary>Default constructor for creating a BaseComponent object from an comma separated input string.</summary>
         /// <param name="InputString">A semi colon separated string with segment input for the first segment of the component</param>
         public BaseComponent(string InputString)
@@ -1012,6 +1034,22 @@ namespace XlsPipePlotBuildingBlocks
 
         /// <summary>The BaseComponent object current segment is a child of</summary>
         public BaseComponent Parent { get; set; }
+
+        /// <summary>A dictionary containing the keywords (LENGTH, DO, etc) and values for the segment.</summary>
+        public Dictionary<string, string> KeyValues
+        {
+            get
+            {
+                Dictionary<string, string> _keyValues = new Dictionary<string, string>()
+                {
+                    {"LENGTH",Length.ToString()}, {"DO", DiameterOuter.ToString()}, {"WALLTHICKNESS", WallThickness.ToString()},
+                    { "PARAM1", Parameter1.ToString()}, {"PARAM2", Parameter2.ToString()}, {"ANGLE_VERTICAL", AngleVertical.ToString()},
+                    {"ANGLE_AZIMUTHAL", AngleAzimuthal.ToString()}, {"ANGLE_AXIS", AngleAxis.ToString()}, {"COORDS1_LOC", Coords1.Repr(Parent.Coords1)},
+                    {"NOTES", Notes}, {"DRAWING", Drawing}
+                };
+                return _keyValues;
+            }
+        }
 
         public BaseSegment() { }
 
@@ -1291,8 +1329,6 @@ namespace XlsPipePlotBuildingBlocks
         private readonly BaseComponent Component;
         private readonly BaseSegment Segment;
 
-        public IDictionary<string, string> KeywordsAndValues = new Dictionary<string, string>();
-
         /// <summary>
         /// Constructor
         /// </summary>
@@ -1305,34 +1341,6 @@ namespace XlsPipePlotBuildingBlocks
             this.Segment = Segment;
             if (Filename != "")
                 ReadTemplateFile(Filename);
-
-            if (Segment != null)
-            {
-                KeywordsAndValues.Add("LENGTH", Segment.Length.ToString());
-                KeywordsAndValues.Add("DO", this.Segment.DiameterOuter.ToString());
-                KeywordsAndValues.Add("WALLTHICKNESS", this.Segment.WallThickness.ToString());
-                KeywordsAndValues.Add("PARAM1", this.Segment.Parameter1.ToString());
-                KeywordsAndValues.Add("PARAM2", this.Segment.Parameter2.ToString());
-                KeywordsAndValues.Add("ANGLE_VERTICAL", Segment.AngleVertical.ToString());
-                KeywordsAndValues.Add("ANGLE_AZIMUTHAL", Segment.AngleAzimuthal.ToString());
-                KeywordsAndValues.Add("ANGLE_AXIS", this.Segment.AngleAxis.ToString());
-                KeywordsAndValues.Add("COORDS1_LOC", this.Segment.Coords1.Repr(Component.Coords1));
-                KeywordsAndValues.Add("NOTES", string.Format("\"{0}\"", this.Segment.Notes));
-
-                // Add keywords to access the TargetSegment properties. If connection is connected (TargetSegment != null), 
-                // replace this
-                for (int i = 0; i < Segment.Connections.Count; i++)
-                {
-                    if (this.Segment.Connections[i].IsConnected)
-                    {
-                        var keywordPrefix = string.Format("C{0}_", i + 1);
-                        KeywordsAndValues.Add(keywordPrefix + "DO", this.Segment.Connections[i].TargetSegment.DiameterOuter.ToString());
-                        KeywordsAndValues.Add(keywordPrefix + "ANGLE_VERTICAL", this.Segment.Connections[i].TargetSegment.AngleVertical.ToString());
-                        KeywordsAndValues.Add(keywordPrefix + "ANGLE_AZIMUTHAL", this.Segment.Connections[i].TargetSegment.AngleAzimuthal.ToString());
-                        KeywordsAndValues.Add(keywordPrefix + "ANGLE_AXIS", this.Segment.Connections[i].TargetSegment.AngleAxis.ToString());
-                    }
-                }
-            }
         }
 
         /// <summary>
@@ -1461,7 +1469,7 @@ namespace XlsPipePlotBuildingBlocks
                 int ind = 0;
                 foreach (BaseSegment segment in Component.Segments)
                 {
-                    foreach (KeyValuePair<string, string> kvp in segment.Template.KeywordsAndValues)
+                    foreach (KeyValuePair<string, string> kvp in segment.KeyValues)
                         s.WriteLine(string.Format("{0}_{1} = {2}; // REMOVE", kvp.Key, ind, kvp.Value));
                     ind += 1;
                 }
@@ -1471,7 +1479,7 @@ namespace XlsPipePlotBuildingBlocks
                     foreach (BaseSegment segment in Component.Segments)
                     {
                         var segmentText = segment.Template.OutputSegment(OutputKeywords: true);
-                        foreach (KeyValuePair<string, string> kvp in segment.Template.KeywordsAndValues)
+                        foreach (KeyValuePair<string, string> kvp in segment.KeyValues)
                         {
                             segmentText = segmentText.Replace(string.Format("({0})", kvp.Key), string.Format("({0}_{1})", kvp.Key, ind));
                         }
@@ -1490,7 +1498,7 @@ namespace XlsPipePlotBuildingBlocks
             {
                 Console.WriteLine(string.Format("- Creating single segment template file = {0}", Filename));
                 s.WriteLine("$fn=50;  // REMOVE");
-                foreach (KeyValuePair<string, string> kvp in Segment.Template.KeywordsAndValues)
+                foreach (KeyValuePair<string, string> kvp in Segment.KeyValues)
                     s.WriteLine(string.Format("{0} = {1}; // REMOVE", kvp.Key, kvp.Value));
 
                 s.WriteLine(_readText);
@@ -1512,8 +1520,21 @@ namespace XlsPipePlotBuildingBlocks
             // If a BaseSegment is associated with this BaseTemplate object
             if (Segment != null)
             {
-                foreach (KeyValuePair<string, string> kvp in Segment.Template.KeywordsAndValues)
+                foreach (KeyValuePair<string, string> kvp in Segment.KeyValues)
                     strOut = strOut.Replace(string.Format("({0})", kvp.Key), kvp.Value);
+
+                // Add keywords to access the TargetSegment properties. If connection is connected (TargetSegment != null), 
+                // replace this
+                for (int i = 0; i < Segment.Connections.Count; i++)
+                {
+                    if (Segment.Connections[i].IsConnected)
+                    {
+                        var keywordPrefix = string.Format("C{0}_", i + 1);
+
+                        foreach (KeyValuePair<string, string> kvp in Segment.Connections[i].TargetSegment.KeyValues)
+                            strOut = strOut.Replace(string.Format("({0}{1})", keywordPrefix, kvp.Key), kvp.Value);
+                    }
+                }
             }
 
             // Loop through every segment and replace keywords with indexes (LENGTH_0, LENGTH_1, etc)
@@ -1522,24 +1543,13 @@ namespace XlsPipePlotBuildingBlocks
             foreach (BaseSegment segment in Component.Segments)
             {
                 ind += 1;
-                foreach (KeyValuePair<string, string> kvp in segment.Template.KeywordsAndValues)
+                foreach (KeyValuePair<string, string> kvp in segment.KeyValues)
                     strOut = strOut.Replace(string.Format("({0}_{1})", kvp.Key, ind), kvp.Value);
             }
 
             // If pipe component
-            var nodes = "[" + string.Join(",", Component.Segments.Select(BaseSegment => BaseSegment.Coords1.Repr(Component.Coords1)).ToList()) + "," + Component.Segments[Component.Segments.Count - 1].Coords2.Repr(Component.Coords1) + "]";
-            var bendradius = "[" + string.Join(",", Component.Segments.Select(BaseSegment => BaseSegment.Parameter1 * BaseSegment.DiameterOuter).ToList()) + "]";
-            var param1Vect = "[" + string.Join(",", Component.Segments.Select(BaseSegment => BaseSegment.Parameter1).ToList()) + "]";
-            var param2Vect = "[" + string.Join(",", Component.Segments.Select(BaseSegment => BaseSegment.Parameter2).ToList()) + "]";
-
-            strOut = strOut.Replace("(DO)", Component.Segments[0].DiameterOuter.ToString());
-            strOut = strOut.Replace("(WALLTHICKNESS)", Component.Segments[0].WallThickness.ToString());
-            strOut = strOut.Replace("(NODES)", nodes);
-            strOut = strOut.Replace("(NOTES)", string.Format("\"{0}\"", Component.Segments[0].Notes));
-            strOut = strOut.Replace("(BENDRADIUS)", bendradius);
-            strOut = strOut.Replace("(VECTOR_PARAM1)", param1Vect);
-            strOut = strOut.Replace("(VECTOR_PARAM2)", param2Vect);
-            strOut = strOut.Replace("(SEGMENTS)", string.Format("{0}", Component.Segments.Count));
+            foreach (KeyValuePair<string, string> kvp in Component.KeyValues)
+                strOut = strOut.Replace(string.Format("({0})", kvp.Key), kvp.Value);
 
             return strOut;
         }

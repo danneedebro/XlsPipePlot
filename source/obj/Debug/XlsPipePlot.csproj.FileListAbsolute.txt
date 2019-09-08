@@ -68,3 +68,13 @@ C:\Danne\Kodning\XlsPipePlot_2sep\source\bin\Debug\XlsPipePlot.exe.config
 C:\Danne\Kodning\XlsPipePlot_2sep\source\bin\Debug\XlsPipePlot.exe
 C:\Danne\Kodning\XlsPipePlot_2sep\source\bin\Debug\XlsPipePlot.pdb
 C:\Danne\Kodning\XlsPipePlot_2sep\source\obj\Debug\XlsPipePlot.csproj.CopyComplete
+C:\Danne\Kodning\XlsPipePlot_keyvalues\source\bin\Debug\XlsPipePlot.exe.config
+C:\Danne\Kodning\XlsPipePlot_keyvalues\source\bin\Debug\XlsPipePlot.exe
+C:\Danne\Kodning\XlsPipePlot_keyvalues\source\bin\Debug\XlsPipePlot.pdb
+C:\Danne\Kodning\XlsPipePlot_keyvalues\source\bin\Debug\Newtonsoft.Json.dll
+C:\Danne\Kodning\XlsPipePlot_keyvalues\source\bin\Debug\Newtonsoft.Json.xml
+C:\Danne\Kodning\XlsPipePlot_keyvalues\source\obj\Debug\XlsPipePlot.csprojAssemblyReference.cache
+C:\Danne\Kodning\XlsPipePlot_keyvalues\source\obj\Debug\XlsPipePlot.csproj.CoreCompileInputs.cache
+C:\Danne\Kodning\XlsPipePlot_keyvalues\source\obj\Debug\XlsPipePlot.csproj.CopyComplete
+C:\Danne\Kodning\XlsPipePlot_keyvalues\source\obj\Debug\XlsPipePlot.exe
+C:\Danne\Kodning\XlsPipePlot_keyvalues\source\obj\Debug\XlsPipePlot.pdb
