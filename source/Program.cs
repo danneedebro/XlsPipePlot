@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using XlsPipePlotBuildingBlocks;
 using Bloat;
 
+
 namespace XlsPipePlot
 {
     /// <summary>
@@ -61,14 +62,14 @@ namespace XlsPipePlot
                         break;
                 }
             }
-
+            
             if (!File.Exists(fileNameInput))
                 Logger.CriticalAndKill("Inputfile '{0}' doesn't exist. Quitting", fileNameInput);
             
             if (fileNameOutput == "")
                 Logger.CriticalAndKill("No outputfile specified. Quitting.{0}{0}Use following syntax:{0}>XlsPipePlot.exe -input [input.txt] -output [output.scad]", Environment.NewLine);
 
-            XlsPipePlotMain xlsPipePlot = new XlsPipePlotMain(fileNameInput, fileNameSettings);            
+            XlsPipePlotMain xlsPipePlot = new XlsPipePlotMain(fileNameInput);            
             xlsPipePlot.WriteToFile(fileNameOutput);
 
             if (Logger.NumberOfWarnings > 0 || Logger.NumberOfErrors > 0 || Logger.Level == 5)
@@ -88,7 +89,7 @@ namespace XlsPipePlot
         private XlsPipePlotSettings Settings;
 
         /// <summary>The main components library located in a subfolder to the executable.</summary>
-        private string PathMain = AppDomain.CurrentDomain.BaseDirectory + "stdlib\\";
+        private string PathMain; // = AppDomain.CurrentDomain.BaseDirectory + "../stdlib/";
 
         /// <summary>The local components library located in a subfolder to the input file.</summary>
         private string PathLocal;
@@ -117,11 +118,17 @@ namespace XlsPipePlot
         ///    the local components directory.
         /// </summary>
         /// <param name="Filename"></param>
-        public XlsPipePlotMain(string Filename, string SettingsFile = "SettingsMain.txt")
+        public XlsPipePlotMain(string Filename)
         {
-            Settings = XlsPipePlotSettings.ReadFile(SettingsFile);
+            DirectoryInfo dirExecutable = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+            PathMain = dirExecutable.Parent.FullName + "\\stdlib\\";
+            string settingsFile = PathMain + "settings.txt";
 
-            PathLocal = Path.GetDirectoryName(Filename) + "\\loclib\\";
+            Settings = XlsPipePlotSettings.ReadFile(settingsFile);
+            if (File.Exists(PathMain))
+                Logger.Warning("File exists {0}", PathMain);
+            
+            PathLocal = Path.GetDirectoryName(Path.GetFullPath(Filename)) + "\\loclib\\";
             ReadFile(Filename);
             
             if (Components.Count == 0)
@@ -145,8 +152,8 @@ namespace XlsPipePlot
             Logger.WriteLine("{0}*** STEP 1: READING FROM FILE ***", Environment.NewLine);
             Logger.Debug("Reading file {0}", Filename);
 
-            var previousSegment = new BaseSegment("");
-            var currentSegment = new BaseSegment("");
+            var segmentPrev = new BaseSegment("");
+            var segment = new BaseSegment("");
             
             try
             {   // Open the text file using a stream reader.
@@ -167,34 +174,34 @@ namespace XlsPipePlot
                             case "Volume":
                             case "Component":
                             case "Junction":
-                                currentSegment = new BaseSegment(line);
+                                segment = new BaseSegment(line);
 
-                                if (word1 != word1Prev)
+                                if (word1 != word1Prev) // If new component
                                 {
-                                    var newComponent = new BaseComponent(currentSegment);
+                                    var newComponent = new BaseComponent(segment);
                                     Components.Add(newComponent);
                                 }
-                                else if(word1 == word1Prev)
+                                else if(word1 == word1Prev) // If same component, but new segment
                                 {
                                     // If Pipe and changing dimensions - add a reducer between
-                                    if (Settings.PipeAutoReducer.ContainsKey(currentSegment.Type) && (currentSegment.DiameterOuter != previousSegment.DiameterOuter || currentSegment.WallThickness != previousSegment.WallThickness) )
+                                    if (Settings.PipeAutoReducer.ContainsKey(segment.Type) && (segment.DiameterOuter != segmentPrev.DiameterOuter || segment.WallThickness != segmentPrev.WallThickness) )
                                     {
                                         string pipeSplitType;
-                                        if (!Settings.PipeAutoReducer.TryGetValue(currentSegment.Type, out pipeSplitType))
+                                        if (!Settings.PipeAutoReducer.TryGetValue(segment.Type, out pipeSplitType))
                                             pipeSplitType = "ReducerAuto";
-                                        var reducerInputString = BaseSegment.GetInputString(Type: pipeSplitType, UniqueId: "-", FromId: previousSegment.UniqueId, FromNode: "B", ToId: currentSegment.UniqueId,
-                                            ToNode: "A");
+                                        var reducerInputString = BaseSegment.GetInputString(Type: pipeSplitType, UniqueId: "-", FromId: segmentPrev.UniqueId, FromNode: "B", ToId: segment.UniqueId,
+                                            ToNode: "A", AngleAxis: segmentPrev.AngleAxis, AngleAzimuthal: segmentPrev.AngleAzimuthal, AngleVertical: segmentPrev.AngleVertical, 
+                                            DiameterOuter: Math.Max(segmentPrev.DiameterOuter, segment.DiameterOuter));
                                         var newReducer = new BaseComponent(reducerInputString);
                                         Components.Add(newReducer);
-
-                                        Components.Add(new BaseComponent(currentSegment));
+                                        Components.Add(new BaseComponent(segment));
                                     }
                                     else  // If other component
                                     {
-                                        Components[Components.Count - 1].AddSegment(currentSegment);
+                                        Components[Components.Count - 1].AddSegment(segment);
                                     }
                                 }
-                                previousSegment = currentSegment;
+                                segmentPrev = segment;
                                 break;
 
                             case "Refvol":
@@ -210,7 +217,7 @@ namespace XlsPipePlot
                                 break;
 
                             default:
-                                //currentSegment = new BaseSegment("");
+                                //segment = new BaseSegment("");
                                 break;
                         }
                         word1Prev = word1;
@@ -512,13 +519,25 @@ namespace XlsPipePlot
             s.WriteLine("// Generated using XlsPipePlot " + DateTime.Now.ToString());
             s.WriteLine("//");
             s.WriteLine("// https://github.com/danneedebro/XlsPipePlot");
+            s.WriteLine("//");
             s.WriteLine("");
             s.WriteLine("$fn=50;");
             foreach (KeyValuePair<string, string> kvp in Settings.IncludeList)
                 s.WriteLine(string.Format("include <{0}>", kvp.Value));
             
-            foreach (KeyValuePair<string, string> kvp in Settings.UseList)
-                s.WriteLine(string.Format("use <{0}>", kvp.Value));
+            foreach (KeyValuePair<string, string[]> kvp in Settings.UseList)
+            {
+                foreach (string fn in kvp.Value)
+                {
+                    if (File.Exists(PathLocal + fn))
+                        s.WriteLine(string.Format("use <{0}>", PathLocal + fn));
+                    else if (File.Exists(PathMain + fn))
+                        s.WriteLine(string.Format("use <{0}>", PathMain + fn));
+                    else
+                        s.WriteLine(string.Format("use <{0}>", fn));
+                }
+                
+            }
 
             s.WriteLine("");
             foreach (KeyValuePair<string, string> kvp in Settings.Variables)
@@ -618,7 +637,7 @@ namespace XlsPipePlot
         public IDictionary<string, string> IncludeList = new Dictionary<string, string>();
 
         /// <summary>List of filenames (absolute path, relative path or only name) to .scad files that are to be used (methods and functions available) in model.</summary>
-        public IDictionary<string, string> UseList = new Dictionary<string, string>();
+        public IDictionary<string, string[]> UseList = new Dictionary<string, string[]>();
 
         /// <summary>Default template for components.</summary>
         public IDictionary<string, string> DefaultTemplateComponent = new Dictionary<string, string>();
@@ -682,7 +701,7 @@ namespace XlsPipePlot
                 IncludeList[kvp.Key] = kvp.Value;
 
             // UseList
-            foreach (KeyValuePair<string, string> kvp in SettingsToAppend.UseList)
+            foreach (KeyValuePair<string, string[]> kvp in SettingsToAppend.UseList)
                 UseList[kvp.Key] = kvp.Value;
 
             // DefaultTemplateComponent
@@ -1050,9 +1069,9 @@ namespace XlsPipePlotBuildingBlocks
                 if (!Double.TryParse(inputWords[11], out readDz)) readDz = 0.0;
                 //Dz = tmpDbl;
                 if (!Double.TryParse(inputWords[12], out tmpDbl)) tmpDbl = 0.0;
-                DiameterOuter = tmpDbl * 0.001;
+                DiameterOuter = tmpDbl;
                 if (!Double.TryParse(inputWords[13], out tmpDbl)) tmpDbl = 0.0;
-                WallThickness = tmpDbl * 0.001;
+                WallThickness = tmpDbl;
                 if (!Double.TryParse(inputWords[14], out tmpDbl)) tmpDbl = 0.0;
                 Parameter1 = tmpDbl;
                 if (!Double.TryParse(inputWords[15], out tmpDbl)) tmpDbl = 0.0;
